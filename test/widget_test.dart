@@ -1,11 +1,16 @@
 import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:video_downloader/controllers/download_controller.dart';
 import 'package:video_downloader/controllers/video_controller.dart';
 import 'package:video_downloader/main.dart';
+import 'package:video_downloader/models/download_task.dart';
+import 'package:video_downloader/models/quality_option.dart';
 import 'package:video_downloader/models/video_format.dart';
 import 'package:video_downloader/models/video_info.dart';
+import 'package:video_downloader/services/download_service.dart';
 import 'package:video_downloader/services/process_service.dart';
+import 'package:video_downloader/services/storage_service.dart';
 import 'package:video_downloader/services/ytdlp_service.dart';
 
 class MockYtDlpService extends YtDlpService {
@@ -34,6 +39,32 @@ class MockYtDlpService extends YtDlpService {
   }
 }
 
+class MockDownloadService extends DownloadService {
+  MockDownloadService() : super(processService: _DummyProcessService());
+
+  @override
+  Future<void> startDownload({
+    required VideoInfo video,
+    required QualityOption quality,
+    required String destinationDirectory,
+    required DownloadProgressCallback onProgress,
+  }) async {
+    final task = DownloadTask(
+      id: video.id,
+      url: 'https://example.com',
+      title: video.title,
+      status: DownloadStatus.downloading,
+      progress: 0.45,
+    );
+    onProgress(task);
+  }
+}
+
+class MockStorageService extends StorageService {
+  @override
+  Future<String> getDefaultDownloadsDirectory() async => '/home/user/Downloads';
+}
+
 class _DummyProcessService implements ProcessService {
   @override
   Future<io.ProcessResult> run(String executable, List<String> arguments,
@@ -51,18 +82,30 @@ class _DummyProcessService implements ProcessService {
 }
 
 void main() {
-  testWidgets('Renders HomeScreen with input bar and empty state',
+  testWidgets('Full analyze, quality selection, and download flow',
       (WidgetTester tester) async {
-    final mockService = MockYtDlpService();
-    final controller = VideoController(ytDlpService: mockService);
+    tester.view.physicalSize = const Size(1280, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(VideoDownloaderApp(videoController: controller));
+    final mockYtDlp = MockYtDlpService();
+    final mockDownload = MockDownloadService();
+    final mockStorage = MockStorageService();
 
-    // Verify title and headers
+    final videoController = VideoController(ytDlpService: mockYtDlp);
+    final downloadController = DownloadController(
+      downloadService: mockDownload,
+      storageService: mockStorage,
+    );
+
+    await tester.pumpWidget(VideoDownloaderApp(
+      videoController: videoController,
+      downloadController: downloadController,
+    ));
+
+    // Verify initial state
     expect(find.text('Video Downloader'), findsOneWidget);
-    expect(find.text('Analyze Media'), findsOneWidget);
-    expect(find.text('No video analyzed yet'), findsOneWidget);
-    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('Ready when you are!'), findsOneWidget);
     expect(find.text('Analyze'), findsOneWidget);
 
     // Enter a URL
@@ -70,17 +113,29 @@ void main() {
         find.byType(TextField), 'https://www.youtube.com/watch?v=123');
     await tester.pump();
 
-    // Tap the analyze button
+    // Tap Analyze
     await tester.tap(find.text('Analyze'));
-    await tester.pump(); // Start async action
-
-    // Wait for the mock fetch to settle
+    await tester.pump();
     await tester.pumpAndSettle();
 
-    // Verify the preview card is rendered with metadata
+    // Verify video preview card
     expect(find.text('Sample Video Title'), findsOneWidget);
     expect(find.text('Sample Creator'), findsOneWidget);
     expect(find.text('05:30'), findsNWidgets(2));
-    expect(find.text('1 formats available'), findsOneWidget);
+
+    // Verify download configuration card
+    expect(find.text('Select Quality & Format'), findsOneWidget);
+    expect(find.text('Save location'), findsOneWidget);
+    expect(find.text('Start Download'), findsOneWidget);
+
+    // Tap Start Download
+    await tester.tap(find.text('Start Download'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // Verify live progress card
+    expect(find.textContaining('Downloading: Sample Video Title'), findsOneWidget);
+    expect(find.text('45.0%'), findsOneWidget);
+    expect(find.text('Cancel'), findsOneWidget);
   });
 }
