@@ -33,4 +33,21 @@ class DownloadTask {
     this.eta,
     this.errorMessage,
   });
+
+  String get formattedSpeed {
+    if (speed == null || speed! <= 0) return '0.0 MB/s';
+    if (speed! < 1024 * 1024) {
+      return '${(speed! / 1024).toStringAsFixed(1)} KB/s';
+    }
+    return '${(speed! / (1024 * 1024)).toStringAsFixed(1)} MB/s';
+  }
+
+  String get formattedEta {
+    if (eta == null) return '—:—';
+    final totalSeconds = eta!.inSeconds;
+    if (totalSeconds < 0) return '—:—';
+    final minutes = eta!.inMinutes;
+    final seconds = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
 }
