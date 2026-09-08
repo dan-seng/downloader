@@ -12,11 +12,11 @@ class DownloadTask {
   final String id;
   final String url;
   final String title;
-  final String? destinationPath;
   final String? formatId;
 
+  String? destinationPath;
   DownloadStatus status;
-  double progress; // 0.0 to 1.0 (or percentage)
+  double progress; // 0.0 to 1.0
   double? speed; // bytes per second
   Duration? eta;
   String? errorMessage;
