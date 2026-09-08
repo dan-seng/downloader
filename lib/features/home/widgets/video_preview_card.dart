@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../models/video_info.dart';
 
-/// Card presenting analyzed video metadata including thumbnail, title,
-/// duration, and available format count.
+/// Clean and modern card presenting video metadata, thumbnail,
+/// duration, and stream counts.
 class VideoPreviewCard extends StatelessWidget {
   final VideoInfo videoInfo;
 
@@ -24,9 +24,9 @@ class VideoPreviewCard extends StatelessWidget {
           children: [
             // Thumbnail with Duration Overlay
             _buildThumbnail(context),
-            const SizedBox(width: 20),
+            const SizedBox(width: 18),
 
-            // Metadata Details
+            // Video Details
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -39,48 +39,59 @@ class VideoPreviewCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
+                      height: 1.3,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
 
-                  // Uploader
+                  // Uploader Chip
                   if (videoInfo.uploader != null && videoInfo.uploader!.isNotEmpty)
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.account_circle_outlined,
-                          size: 16,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            videoInfo.uploader!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.account_circle,
+                            size: 15,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              videoInfo.uploader!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   const SizedBox(height: 12),
 
-                  // Badges: Duration and Formats
+                  // Stream statistics
                   Wrap(
                     spacing: 8,
-                    runSpacing: 8,
+                    runSpacing: 6,
                     children: [
-                      _buildBadge(
+                      _buildPill(
                         context,
-                        icon: Icons.timer_outlined,
+                        icon: Icons.schedule_rounded,
                         label: videoInfo.formattedDuration,
+                        color: theme.colorScheme.primary,
                       ),
-                      _buildBadge(
+                      _buildPill(
                         context,
-                        icon: Icons.video_collection_outlined,
-                        label: '${videoInfo.formats.length} formats available',
+                        icon: Icons.layers_outlined,
+                        label: '${videoInfo.formats.length} streams available',
+                        color: theme.colorScheme.secondary,
                       ),
                     ],
                   ),
@@ -95,10 +106,10 @@ class VideoPreviewCard extends StatelessWidget {
 
   Widget _buildThumbnail(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(12),
       child: SizedBox(
         width: 180,
-        height: 101, // 16:9 aspect ratio
+        height: 101, // 16:9 ratio
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -121,17 +132,18 @@ class VideoPreviewCard extends StatelessWidget {
                 bottom: 6,
                 right: 6,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(4),
+                    color: Colors.black.withValues(alpha: 0.75),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     videoInfo.formattedDuration,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.3,
                     ),
                   ),
                 ),
@@ -154,38 +166,40 @@ class VideoPreviewCard extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : Icon(
-                Icons.video_library,
-                size: 40,
-                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                Icons.movie_filter_outlined,
+                size: 38,
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
               ),
       ),
     );
   }
 
-  Widget _buildBadge(
+  Widget _buildPill(
     BuildContext context, {
     required IconData icon,
     required String label,
+    required Color color,
   }) {
     final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(6),
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+          color: color.withValues(alpha: 0.25),
         ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: theme.colorScheme.primary),
-          const SizedBox(width: 6),
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 5),
           Text(
             label,
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+            style: theme.textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface,
             ),
           ),
         ],
