@@ -23,12 +23,32 @@ class DownloadController extends ChangeNotifier {
   })  : _downloadService = downloadService ?? DownloadService(),
         _storageService = storageService ?? const StorageService();
 
+  final List<String> _consoleLogs = ['deck ready — waiting for a link'];
+  final List<DownloadTask> _recentQueue = [];
+
   String get downloadDirectory => _downloadDirectory;
   QualityOption? get selectedQuality => _selectedQuality;
   List<QualityOption> get availableQualities => _availableQualities;
   DownloadTask? get currentTask => _currentTask;
   String? get errorMessage => _errorMessage;
-  bool get isDownloading => _downloadService.isDownloading;
+  bool get isDownloading =>
+      _downloadService.isDownloading ||
+      (_currentTask != null &&
+          _currentTask!.status == DownloadStatus.downloading);
+  List<String> get consoleLogs => List.unmodifiable(_consoleLogs);
+  List<DownloadTask> get recentQueue => List.unmodifiable(_recentQueue);
+
+  /// Appends a timestamped log to the terminal output console.
+  void addLog(String message) {
+    final now = DateTime.now();
+    final timeStr =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+    _consoleLogs.add('$timeStr  $message');
+    if (_consoleLogs.length > 200) {
+      _consoleLogs.removeAt(0);
+    }
+    notifyListeners();
+  }
 
   /// Initializes the default download directory from system paths.
   Future<void> initialize() async {
@@ -45,11 +65,25 @@ class DownloadController extends ChangeNotifier {
       _selectedQuality = null;
     } else {
       _availableQualities = QualityOption.fromVideoInfo(video);
-      // Select 1080p by default if present, else first available option
-      _selectedQuality = _availableQualities.firstWhere(
-        (q) => q.height == 1080,
-        orElse: () => _availableQualities.first,
-      );
+
+      // Find the highest resolution specific video option
+      QualityOption? bestOption;
+      for (final option in _availableQualities) {
+        if (!option.isAudioOnly && option.height != null && option.id != 'best') {
+          if (bestOption == null ||
+              (bestOption.height != null &&
+                  option.height! > bestOption.height!)) {
+            bestOption = option;
+          }
+        }
+      }
+
+      // Default to highest resolution specific option, or first available option
+      _selectedQuality = bestOption ??
+          (_availableQualities.isNotEmpty ? _availableQualities.first : null);
+
+      addLog('resolved title: "${video.title}"');
+      addLog('${video.formats.length} streams available, default: ${_selectedQuality?.label ?? "unknown"}');
     }
     notifyListeners();
   }
@@ -84,6 +118,7 @@ class DownloadController extends ChangeNotifier {
     }
 
     _errorMessage = null;
+    addLog('\$ spidey-get -f ${_selectedQuality!.id} "${video.title}"');
 
     try {
       await _downloadService.startDownload(
@@ -92,17 +127,30 @@ class DownloadController extends ChangeNotifier {
         destinationDirectory: _downloadDirectory,
         onProgress: (task) {
           _currentTask = task;
+          if (task.status == DownloadStatus.completed) {
+            if (!_recentQueue.any((t) => t.id == task.id)) {
+              _recentQueue.insert(0, task);
+            }
+            addLog('download complete — saved to ${task.destinationPath}');
+          } else if (task.status == DownloadStatus.failed) {
+            addLog('download failed: ${task.errorMessage ?? "unknown error"}');
+          }
           notifyListeners();
+        },
+        onLog: (line) {
+          addLog(line);
         },
       );
     } catch (e) {
       _errorMessage = e.toString();
+      addLog('error: $_errorMessage');
       notifyListeners();
     }
   }
 
   /// Cancels the ongoing download.
   Future<void> cancelDownload() async {
+    addLog('download cancel requested');
     await _downloadService.cancelCurrentDownload();
     notifyListeners();
   }

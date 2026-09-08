@@ -26,8 +26,10 @@ class MockDownloadService extends DownloadService {
     required QualityOption quality,
     required String destinationDirectory,
     required DownloadProgressCallback onProgress,
+    DownloadLogCallback? onLog,
   }) async {
     downloadStarted = true;
+    onLog?.call('[download] 50% of 10.0MiB at 5.0MiB/s ETA 00:01');
     final task = DownloadTask(
       id: video.id,
       url: 'https://example.com',
@@ -78,6 +80,36 @@ void main() {
 
       expect(controller.availableQualities, isNotEmpty);
       expect(controller.selectedQuality?.height, equals(1080));
+    });
+
+    test('setting 4K video selects 2160p by default', () {
+      const video = VideoInfo(
+        id: '4k-test',
+        title: '4K Title',
+        formats: [
+          VideoFormat(formatId: '1', height: 2160, videoCodec: 'vp9'),
+          VideoFormat(formatId: '2', height: 1080, videoCodec: 'h264'),
+        ],
+      );
+
+      controller.setVideo(video);
+
+      expect(controller.selectedQuality?.height, equals(2160));
+    });
+
+    test('setting 720p video selects 720p by default', () {
+      const video = VideoInfo(
+        id: '720p-test',
+        title: '720p Title',
+        formats: [
+          VideoFormat(formatId: '1', height: 720, videoCodec: 'h264'),
+          VideoFormat(formatId: '2', height: 480, videoCodec: 'h264'),
+        ],
+      );
+
+      controller.setVideo(video);
+
+      expect(controller.selectedQuality?.height, equals(720));
     });
 
     test('pickDirectory updates destination directory', () async {
