@@ -53,6 +53,7 @@ class FakeStreamProcess implements io.Process {
 
 class FakeStartProcessService implements ProcessService {
   late FakeStreamProcess process;
+  List<String>? lastArguments;
 
   @override
   Future<io.ProcessResult> run(String executable, List<String> arguments,
@@ -65,6 +66,7 @@ class FakeStartProcessService implements ProcessService {
       {String? workingDirectory,
       Map<String, String>? environment,
       io.ProcessStartMode mode = io.ProcessStartMode.normal}) async {
+    lastArguments = arguments;
     return process;
   }
 }
@@ -130,6 +132,55 @@ void main() {
       expect(lastTask?.progress, equals(1.0));
     });
 
+    test('parses raw newline progress format emitted by yt-dlp', () async {
+      final fakeProcess = FakeStreamProcess();
+      fakeService.process = fakeProcess;
+
+      const video = VideoInfo(
+        id: 'raw-vid',
+        title: 'Raw Title',
+        formats: [],
+      );
+
+      const quality = QualityOption(
+        id: '1080p',
+        label: '1080p',
+        extension: 'mp4',
+        formatSpecifier: '18',
+      );
+
+      DownloadTask? lastTask;
+
+      final downloadFuture = downloadService.startDownload(
+        video: video,
+        quality: quality,
+        destinationDirectory: '/tmp',
+        onProgress: (task) {
+          lastTask = task;
+        },
+      );
+
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      // Actual --newline / --progress-template output (raw, no prefix)
+      fakeProcess.emitStdout('[download] Destination: /tmp/Raw Title.mp4\n');
+      fakeProcess.emitStdout('  0.0%| Unknown B/s|Unknown\n');
+      fakeProcess.emitStdout(' 17.7%|   2.07MiB/s|00:04\n');
+      fakeProcess.emitStdout(' 88.5%| 294.29KiB/s|00:04\n');
+
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(lastTask?.destinationPath, equals('/tmp/Raw Title.mp4'));
+      expect(lastTask?.progress, closeTo(0.885, 0.01));
+      expect(lastTask?.speed, closeTo(294.29 * 1024, 0.1));
+      expect(lastTask?.eta, equals(const Duration(seconds: 4)));
+
+      fakeProcess.completeProcess(0);
+      await downloadFuture;
+
+      expect(lastTask?.status, equals(DownloadStatus.completed));
+    });
+
     test('cancellation terminates process and marks task cancelled', () async {
       final fakeProcess = FakeStreamProcess();
       fakeService.process = fakeProcess;
@@ -163,6 +214,77 @@ void main() {
       await downloadFuture;
 
       expect(lastTask?.status, equals(DownloadStatus.cancelled));
+    });
+
+    test('constructs video arguments without restrictive extractor args and with mp4 merge', () async {
+      final fakeProcess = FakeStreamProcess();
+      fakeService.process = fakeProcess;
+
+      const video = VideoInfo(
+        id: 'test-vid-args',
+        title: 'Video Title',
+        formats: [],
+      );
+
+      const quality = QualityOption(
+        id: '1080p',
+        label: '1080p',
+        extension: 'mp4',
+        formatSpecifier: 'bv*[height=1080]+ba/b[height=1080]',
+      );
+
+      final downloadFuture = downloadService.startDownload(
+        video: video,
+        quality: quality,
+        destinationDirectory: '/tmp',
+        onProgress: (_) {},
+      );
+
+      await Future.delayed(const Duration(milliseconds: 10));
+      fakeProcess.completeProcess(0);
+      await downloadFuture;
+
+      final args = fakeService.lastArguments!;
+      expect(args.contains('--extractor-args'), isFalse);
+      expect(args.contains('youtube:player_client=web,android'), isFalse);
+      expect(args.contains('--merge-output-format'), isTrue);
+      expect(args[args.indexOf('--merge-output-format') + 1], equals('mp4'));
+      expect(args.contains('bv*[height=1080]+ba/b[height=1080]'), isTrue);
+    });
+
+    test('constructs audio extraction arguments for audio-only quality', () async {
+      final fakeProcess = FakeStreamProcess();
+      fakeService.process = fakeProcess;
+
+      const video = VideoInfo(
+        id: 'test-audio-args',
+        title: 'Audio Title',
+        formats: [],
+      );
+
+      const quality = QualityOption(
+        id: 'audio_best',
+        label: 'Audio Only',
+        extension: 'm4a',
+        isAudioOnly: true,
+        formatSpecifier: 'ba/b',
+      );
+
+      final downloadFuture = downloadService.startDownload(
+        video: video,
+        quality: quality,
+        destinationDirectory: '/tmp',
+        onProgress: (_) {},
+      );
+
+      await Future.delayed(const Duration(milliseconds: 10));
+      fakeProcess.completeProcess(0);
+      await downloadFuture;
+
+      final args = fakeService.lastArguments!;
+      expect(args.contains('-x'), isTrue);
+      expect(args.contains('--audio-format'), isTrue);
+      expect(args[args.indexOf('--audio-format') + 1], equals('m4a'));
     });
   });
 }

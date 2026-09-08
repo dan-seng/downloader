@@ -8,6 +8,7 @@ import '../models/video_info.dart';
 import 'process_service.dart';
 
 typedef DownloadProgressCallback = void Function(DownloadTask task);
+typedef DownloadLogCallback = void Function(String line);
 
 /// Service responsible for managing real-time video downloading,
 /// progress parsing, and process lifecycle cancellation.
@@ -43,6 +44,7 @@ class DownloadService {
     required QualityOption quality,
     required String destinationDirectory,
     required DownloadProgressCallback onProgress,
+    DownloadLogCallback? onLog,
   }) async {
     if (isDownloading) {
       throw const ProcessExecutionException('A download is already in progress.');
@@ -67,10 +69,20 @@ class DownloadService {
       '--newline',
       '--progress-template',
       'download:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s',
-      '--extractor-args',
-      'youtube:player_client=web,android',
+      // Allow yt-dlp to fetch the JS challenge solver (needed for YouTube
+      // n-challenge / bot detection) and enable the local JS runtime.
+      '--remote-components',
+      'ejs:github',
       '-f',
       quality.formatSpecifier,
+      if (quality.isAudioOnly) ...[
+        '-x',
+        '--audio-format',
+        quality.extension,
+      ] else ...[
+        '--merge-output-format',
+        'mp4',
+      ],
       '-o',
       '$destinationDirectory/%(title)s.%(ext)s',
       '--no-playlist',
@@ -101,6 +113,10 @@ class DownloadService {
           .listen((line) {
         _parseStdoutLine(line, task);
         onProgress(task);
+        if (onLog != null) {
+          final clean = sanitizeLog(line);
+          if (clean.isNotEmpty) onLog(clean);
+        }
       });
 
       // Handle standard error stream
@@ -163,32 +179,16 @@ class DownloadService {
   void _parseStdoutLine(String line, DownloadTask task) {
     final trimmed = line.trim();
 
-    // Check for progress template output: `download: 15.4%|  4.20MiB/s|00:32`
+    // Handle raw progress lines from --newline / --progress-template.
+    // Format: `0.0%| Unknown B/s|Unknown` (possibly with a leading `download:` key).
     if (trimmed.startsWith('download:')) {
-      final parts = trimmed.substring(9).split('|');
-      if (parts.isNotEmpty) {
-        // Percent
-        final percentStr = parts[0].replaceAll('%', '').trim();
-        final parsedPercent = double.tryParse(percentStr);
-        if (parsedPercent != null) {
-          task.progress = (parsedPercent / 100.0).clamp(0.0, 1.0);
-        }
-      }
+      _parseProgressPayload(trimmed.substring(9), task);
+      return;
+    }
 
-      // Speed & ETA
-      if (parts.length >= 2) {
-        final speedStr = parts[1].trim();
-        if (speedStr != 'NA' && speedStr.isNotEmpty) {
-          task.speed = _parseSpeedToBytes(speedStr);
-        }
-      }
-
-      if (parts.length >= 3) {
-        final etaStr = parts[2].trim();
-        if (etaStr != 'NA' && etaStr.isNotEmpty) {
-          task.eta = _parseEtaDuration(etaStr);
-        }
-      }
+    // Raw form: `<percent>%|<speed>|<eta>` e.g. `17.7%|   2.07MiB/s|00:04`
+    if (RegExp(r'^\d[\d\.]*%.*\|').hasMatch(trimmed)) {
+      _parseProgressPayload(trimmed, task);
       return;
     }
 
@@ -199,8 +199,38 @@ class DownloadService {
       // Merged file output: `[Merger] Merging formats into "/path/to/file.mp4"`
       final path = trimmed.substring(31).replaceAll('"', '').trim();
       task.destinationPath = path;
+    } else if (trimmed.startsWith('[ExtractAudio] Destination: ')) {
+      // Audio extracted output: `[ExtractAudio] Destination: /path/to/file.m4a`
+      task.destinationPath = trimmed.substring(28).trim();
     } else if (trimmed.contains('has already been downloaded')) {
       task.progress = 1.0;
+    }
+  }
+
+  void _parseProgressPayload(String payload, DownloadTask task) {
+    final parts = payload.split('|');
+    if (parts.isNotEmpty) {
+      // Percent
+      final percentStr = parts[0].replaceAll('%', '').trim();
+      final parsedPercent = double.tryParse(percentStr);
+      if (parsedPercent != null) {
+        task.progress = (parsedPercent / 100.0).clamp(0.0, 1.0);
+      }
+    }
+
+    // Speed & ETA
+    if (parts.length >= 2) {
+      final speedStr = parts[1].trim();
+      if (speedStr != 'NA' && speedStr != 'Unknown B/s' && speedStr.isNotEmpty) {
+        task.speed = _parseSpeedToBytes(speedStr);
+      }
+    }
+
+    if (parts.length >= 3) {
+      final etaStr = parts[2].trim();
+      if (etaStr != 'NA' && etaStr != 'Unknown' && etaStr.isNotEmpty) {
+        task.eta = _parseEtaDuration(etaStr);
+      }
     }
   }
 
@@ -239,5 +269,13 @@ class DownloadService {
       }
     }
     return null;
+  }
+
+  /// Sanitizes output lines to remove internal engine and binary names.
+  static String sanitizeLog(String raw) {
+    return raw
+        .replaceAll(RegExp(r'yt[-_]?dlp', caseSensitive: false), 'spidey_engine')
+        .replaceAll(RegExp(r'\[youtube\]', caseSensitive: false), '[engine]')
+        .trim();
   }
 }
