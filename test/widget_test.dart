@@ -40,7 +40,12 @@ class MockYtDlpService extends YtDlpService {
 }
 
 class MockDownloadService extends DownloadService {
+  bool _isDownloading = false;
+
   MockDownloadService() : super(processService: _DummyProcessService());
+
+  @override
+  bool get isDownloading => _isDownloading;
 
   @override
   Future<void> startDownload({
@@ -48,13 +53,19 @@ class MockDownloadService extends DownloadService {
     required QualityOption quality,
     required String destinationDirectory,
     required DownloadProgressCallback onProgress,
+    DownloadLogCallback? onLog,
   }) async {
+    _isDownloading = true;
+    onLog?.call('[download] Destination: /tmp/sample.mp4');
+    onLog?.call('[download] 45.0% of 25.00MiB at 4.50MiB/s ETA 00:03');
     final task = DownloadTask(
       id: video.id,
       url: 'https://example.com',
       title: video.title,
       status: DownloadStatus.downloading,
       progress: 0.45,
+      speed: 4.5 * 1024 * 1024,
+      eta: const Duration(seconds: 3),
     );
     onProgress(task);
   }
@@ -82,7 +93,7 @@ class _DummyProcessService implements ProcessService {
 }
 
 void main() {
-  testWidgets('Full analyze, quality selection, and download flow',
+  testWidgets('SPIDEY_DLX full analyze, quality selection, and download flow',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1280, 1000);
     tester.view.devicePixelRatio = 1.0;
@@ -103,39 +114,43 @@ void main() {
       downloadController: downloadController,
     ));
 
-    // Verify initial state
-    expect(find.text('Video Downloader'), findsOneWidget);
-    expect(find.text('Ready when you are!'), findsOneWidget);
-    expect(find.text('Analyze'), findsOneWidget);
+    // Verify initial SPIDEY_DLX faceplate & deck state
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is RichText && w.text.toPlainText().contains('SPIDEY_DLX'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('WEB-SLINGING VIDEO GRABBER'), findsOneWidget);
+    expect(find.text('ANALYZE'), findsOneWidget);
+    expect(find.text('No media target loaded'), findsOneWidget);
 
     // Enter a URL
     await tester.enterText(
         find.byType(TextField), 'https://www.youtube.com/watch?v=123');
     await tester.pump();
 
-    // Tap Analyze
-    await tester.tap(find.text('Analyze'));
+    // Tap ANALYZE
+    await tester.tap(find.text('ANALYZE'));
     await tester.pump();
     await tester.pumpAndSettle();
 
-    // Verify video preview card
-    expect(find.text('Sample Video Title'), findsOneWidget);
-    expect(find.text('Sample Creator'), findsOneWidget);
-    expect(find.text('05:30'), findsNWidgets(2));
+    // Verify video preview card details (title appears in both sidebar queue and preview deck)
+    expect(find.text('Sample Video Title'), findsNWidgets(2));
+    expect(find.textContaining('Sample Creator'), findsOneWidget);
+    expect(find.text('05:30'), findsWidgets);
+    expect(find.text('FORMAT'), findsOneWidget);
+    expect(find.text('QUALITY'), findsOneWidget);
+    expect(find.textContaining('SAVING TO'), findsOneWidget);
+    expect(find.text('DOWNLOAD'), findsOneWidget);
 
-    // Verify download configuration card
-    expect(find.text('Select Quality & Format'), findsOneWidget);
-    expect(find.text('Save location'), findsOneWidget);
-    expect(find.text('Start Download'), findsOneWidget);
-
-    // Tap Start Download
-    await tester.tap(find.text('Start Download'));
+    // Tap DOWNLOAD
+    await tester.tap(find.text('DOWNLOAD'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    // Verify live progress card
-    expect(find.textContaining('Downloading: Sample Video Title'), findsOneWidget);
-    expect(find.text('45.0%'), findsOneWidget);
-    expect(find.text('Cancel'), findsOneWidget);
+    // Verify downloading state in faceplate status pill and transport button
+    expect(find.text('DOWNLOADING'), findsNWidgets(2));
+    expect(find.text('SUBPROCESS OUTPUT'), findsOneWidget);
   });
 }
