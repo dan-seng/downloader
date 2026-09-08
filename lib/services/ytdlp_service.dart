@@ -65,7 +65,7 @@ class YtDlpService {
     if (stdoutText.isEmpty) {
       throw const YtDlpException(
         'No metadata received from video service.',
-        technicalDetails: 'Empty stdout returned by yt-dlp',
+        technicalDetails: 'Empty output returned by engine',
       );
     }
 
