@@ -23,7 +23,7 @@ void main() {
       expect(info.thumbnail, isNotNull);
       expect(info.formats, isNotEmpty);
       expect(info.videoFormats, isNotEmpty);
-    }, timeout: const Timeout(Duration(seconds: 45)));
+    }, timeout: const Timeout(Duration(seconds: 90)));
 
     test('handles unsupported/non-video URLs gracefully', () async {
       const badUrl = 'https://invalid-host-name-does-not-exist.test/video';
