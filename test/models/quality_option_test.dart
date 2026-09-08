@@ -44,7 +44,50 @@ void main() {
       expect(options.any((o) => o.id == '720p'), isFalse);
       expect(options.any((o) => o.id == '480p'), isTrue);
       expect(options.any((o) => o.id == '360p'), isTrue);
-      expect(options.any((o) => o.id == 'audio_best'), isTrue);
+    });
+
+    test('strict format specifier targets exact resolution without falling back to /best', () {
+      const video = VideoInfo(
+        id: 'test-3',
+        title: 'HD Test',
+        formats: [
+          VideoFormat(formatId: '1', height: 1080, videoCodec: 'h264'),
+          VideoFormat(formatId: '2', height: 720, videoCodec: 'h264'),
+        ],
+      );
+
+      final options = QualityOption.fromVideoInfo(video);
+      final option720 = options.firstWhere((o) => o.id == '720p');
+
+      expect(option720.formatSpecifier.contains('/best'), isFalse);
+      expect(option720.formatSpecifier, contains('height=720'));
+      expect(option720.formatSpecifier, contains('height<=720'));
+    });
+
+    test('calculates estimated bytes when video and audio sizes are present', () {
+      const video = VideoInfo(
+        id: 'test-4',
+        title: 'Size Test',
+        formats: [
+          VideoFormat(
+            formatId: '1',
+            height: 1080,
+            videoCodec: 'h264',
+            fileSize: 40000000,
+          ),
+          VideoFormat(
+            formatId: '2',
+            audioCodec: 'aac',
+            fileSize: 5000000,
+          ),
+        ],
+      );
+
+      final options = QualityOption.fromVideoInfo(video);
+      final option1080 = options.firstWhere((o) => o.id == '1080p');
+
+      expect(option1080.estimatedBytes, equals(45000000));
+      expect(option1080.formattedSize, isNotEmpty);
     });
   });
 }

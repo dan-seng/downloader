@@ -1,4 +1,5 @@
 import '../core/utils/formatters.dart';
+import 'video_format.dart';
 import 'video_info.dart';
 
 /// Represents a simplified, user-friendly download quality and format option.
@@ -38,13 +39,52 @@ class QualityOption {
 
     final sortedHeights = heights.toList()..sort((a, b) => b.compareTo(a));
 
+    // Helper to calculate estimated bytes for a resolution
+    int? getEstimatedBytes(int targetHeight) {
+      final vFormat = videoInfo.formats.cast<VideoFormat?>().firstWhere(
+        (f) =>
+            f != null &&
+            f.hasVideo &&
+            (f.height == targetHeight ||
+                (f.height != null &&
+                    (f.height! - targetHeight).abs() <= 16)),
+        orElse: () => null,
+      );
+      final aFormat = videoInfo.formats.cast<VideoFormat?>().firstWhere(
+        (f) =>
+            f != null &&
+            f.isAudioOnly &&
+            f.fileSize != null &&
+            f.fileSize! > 0,
+        orElse: () => null,
+      );
+
+      final vSize = vFormat?.fileSize;
+      final aSize = aFormat?.fileSize;
+      if (vSize != null && aSize != null) {
+        return vSize + aSize;
+      } else if (vSize != null) {
+        return vSize;
+      }
+      return null;
+    }
+
+    final maxHeight = sortedHeights.isNotEmpty ? sortedHeights.first : null;
+    final bestEstimatedBytes =
+        maxHeight != null ? getEstimatedBytes(maxHeight) : null;
+    final bestLabel = maxHeight != null
+        ? 'Best Quality (${maxHeight}p)'
+        : 'Best Available Quality';
+
     // Best Video + Audio option
     options.add(
-      const QualityOption(
+      QualityOption(
         id: 'best',
-        label: 'Best Available Quality',
+        label: bestLabel,
         extension: 'mp4',
+        height: maxHeight,
         formatSpecifier: 'bv*+ba/b',
+        estimatedBytes: bestEstimatedBytes,
       ),
     );
 
@@ -62,8 +102,34 @@ class QualityOption {
       final targetHeight = preset['height'] as int;
       final name = preset['name'] as String;
 
-      // Check if video has streams matching or greater than this height
-      if (sortedHeights.any((h) => h >= targetHeight)) {
+      // Check if video actually has streams matching this resolution or dimensions
+      final hasFormat = videoInfo.formats.any((f) {
+        if (f.height == targetHeight) return true;
+        if (f.height != null && (f.height! - targetHeight).abs() <= 16) {
+          return true;
+        }
+        if (targetHeight == 2160 && (f.width == 3840 || f.height == 2160)) {
+          return true;
+        }
+        if (targetHeight == 1440 && (f.width == 2560 || f.height == 1440)) {
+          return true;
+        }
+        if (targetHeight == 1080 && (f.width == 1920 || f.height == 1080)) {
+          return true;
+        }
+        if (targetHeight == 720 && (f.width == 1280 || f.height == 720)) {
+          return true;
+        }
+        if (targetHeight == 480 && (f.width == 854 || f.height == 480)) {
+          return true;
+        }
+        if (targetHeight == 360 && (f.width == 640 || f.height == 360)) {
+          return true;
+        }
+        return false;
+      });
+
+      if (hasFormat) {
         options.add(
           QualityOption(
             id: '${targetHeight}p',
@@ -71,20 +137,31 @@ class QualityOption {
             extension: 'mp4',
             height: targetHeight,
             formatSpecifier:
-                'bv*[height<=$targetHeight]+ba/b[height<=$targetHeight]/best',
+                'bv*[height=$targetHeight]+ba/b[height=$targetHeight]/bv*[height<=$targetHeight]+ba/b[height<=$targetHeight]',
+            estimatedBytes: getEstimatedBytes(targetHeight),
           ),
         );
       }
     }
 
     // Audio-only option
+    final audioFormat = videoInfo.formats.cast<VideoFormat?>().firstWhere(
+      (f) =>
+          f != null &&
+          f.isAudioOnly &&
+          f.fileSize != null &&
+          f.fileSize! > 0,
+      orElse: () => null,
+    );
+
     options.add(
-      const QualityOption(
+      QualityOption(
         id: 'audio_best',
         label: 'Audio Only — M4A/MP3',
         extension: 'm4a',
         isAudioOnly: true,
         formatSpecifier: 'ba/b',
+        estimatedBytes: audioFormat?.fileSize,
       ),
     );
 
