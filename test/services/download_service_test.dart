@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:video_downloader/models/audio_config.dart';
 import 'package:video_downloader/models/download_task.dart';
 import 'package:video_downloader/models/quality_option.dart';
+import 'package:video_downloader/models/speed_limit.dart';
 import 'package:video_downloader/models/video_info.dart';
 import 'package:video_downloader/services/download_service.dart';
 import 'package:video_downloader/services/process_service.dart';
@@ -285,6 +287,122 @@ void main() {
       expect(args.contains('-x'), isTrue);
       expect(args.contains('--audio-format'), isTrue);
       expect(args[args.indexOf('--audio-format') + 1], equals('m4a'));
+    });
+
+    test('constructs high-fidelity audio arguments with 320k MP3, embed thumbnail, and metadata', () async {
+      final fakeProcess = FakeStreamProcess();
+      fakeService.process = fakeProcess;
+
+      const video = VideoInfo(
+        id: 'test-studio-audio',
+        title: 'Studio Track',
+        formats: [],
+      );
+
+      const quality = QualityOption(
+        id: 'audio_best',
+        label: 'Audio Only',
+        extension: 'm4a',
+        isAudioOnly: true,
+        formatSpecifier: 'ba/b',
+      );
+
+      const audioConfig = AudioConfig(
+        bitrate: AudioBitrate.kbps320,
+        format: AudioFormat.mp3,
+        embedThumbnail: true,
+        embedMetadata: true,
+      );
+
+      final downloadFuture = downloadService.startDownload(
+        video: video,
+        quality: quality,
+        destinationDirectory: '/music',
+        onProgress: (_) {},
+        audioConfig: audioConfig,
+      );
+
+      await Future.delayed(const Duration(milliseconds: 10));
+      fakeProcess.completeProcess(0);
+      await downloadFuture;
+
+      final args = fakeService.lastArguments!;
+      expect(args.contains('-x'), isTrue);
+      expect(args.contains('--audio-format'), isTrue);
+      expect(args[args.indexOf('--audio-format') + 1], equals('mp3'));
+      expect(args.contains('--audio-quality'), isTrue);
+      expect(args[args.indexOf('--audio-quality') + 1], equals('320K'));
+      expect(args.contains('--embed-thumbnail'), isTrue);
+      expect(args.contains('--convert-thumbnails'), isTrue);
+      expect(args[args.indexOf('--convert-thumbnails') + 1], equals('jpg'));
+      expect(args.contains('--add-metadata'), isTrue);
+    });
+
+    test('applies --limit-rate when throttled speed limit is configured', () async {
+      final fakeProcess = FakeStreamProcess();
+      fakeService.process = fakeProcess;
+
+      const video = VideoInfo(
+        id: 'test-throttled',
+        title: 'Throttled Download',
+        formats: [],
+      );
+
+      const quality = QualityOption(
+        id: '1080p',
+        label: '1080p',
+        extension: 'mp4',
+        formatSpecifier: 'bv+ba',
+      );
+
+      final downloadFuture = downloadService.startDownload(
+        video: video,
+        quality: quality,
+        destinationDirectory: '/downloads',
+        onProgress: (_) {},
+        speedLimit: SpeedLimit.mbps10,
+      );
+
+      await Future.delayed(const Duration(milliseconds: 10));
+      fakeProcess.completeProcess(0);
+      await downloadFuture;
+
+      final args = fakeService.lastArguments!;
+      expect(args.contains('--limit-rate'), isTrue);
+      expect(args[args.indexOf('--limit-rate') + 1], equals('10M'));
+    });
+
+    test('omits --limit-rate when unlimited speed limit is selected', () async {
+      final fakeProcess = FakeStreamProcess();
+      fakeService.process = fakeProcess;
+
+      const video = VideoInfo(
+        id: 'test-unlimited',
+        title: 'Unlimited Download',
+        formats: [],
+      );
+
+      const quality = QualityOption(
+        id: '1080p',
+        label: '1080p',
+        extension: 'mp4',
+        formatSpecifier: 'bv+ba',
+      );
+
+      final downloadFuture = downloadService.startDownload(
+        video: video,
+        quality: quality,
+        destinationDirectory: '/downloads',
+        onProgress: (_) {},
+        speedLimit: SpeedLimit.unlimited,
+      );
+
+      await Future.delayed(const Duration(milliseconds: 10));
+      fakeProcess.completeProcess(0);
+      await downloadFuture;
+
+      final args = fakeService.lastArguments!;
+      expect(args.contains('--limit-rate'), isFalse);
     });
   });
 }

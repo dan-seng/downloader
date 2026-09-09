@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
 import '../core/errors/app_exceptions.dart';
+import '../models/audio_config.dart';
 import '../models/download_task.dart';
 import '../models/quality_option.dart';
+import '../models/speed_limit.dart';
 import '../models/video_info.dart';
 import 'process_service.dart';
 
@@ -45,6 +47,8 @@ class DownloadService {
     required String destinationDirectory,
     required DownloadProgressCallback onProgress,
     DownloadLogCallback? onLog,
+    AudioConfig? audioConfig,
+    SpeedLimit? speedLimit,
   }) async {
     if (isDownloading) {
       throw const ProcessExecutionException('A download is already in progress.');
@@ -75,13 +79,28 @@ class DownloadService {
       'ejs:github',
       '-f',
       quality.formatSpecifier,
+      if (speedLimit != null && speedLimit.rateFlag != null) ...[
+        '--limit-rate',
+        speedLimit.rateFlag!,
+      ],
       if (quality.isAudioOnly) ...[
         '-x',
         '--audio-format',
-        quality.extension,
+        audioConfig?.format.id ?? quality.extension,
+        if (audioConfig != null) ...[
+          '--audio-quality',
+          audioConfig.bitrate.qualityFlag,
+          if (audioConfig.embedThumbnail) ...[
+            '--embed-thumbnail',
+            '--convert-thumbnails',
+            'jpg',
+          ],
+          if (audioConfig.embedMetadata) '--add-metadata',
+        ],
       ] else ...[
         '--merge-output-format',
         'mp4',
+        if (audioConfig?.embedMetadata == true) '--add-metadata',
       ],
       '-o',
       '$destinationDirectory/%(title)s.%(ext)s',
