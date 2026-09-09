@@ -1,8 +1,7 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// 28-bar segmented digital VU meter showing real-time download activity.
+/// Modern sleek progress indicator showing download progress, speed, and ETA.
 class VuMeter extends StatelessWidget {
   final double progress; // 0.0 to 1.0
   final String speedText;
@@ -17,15 +16,12 @@ class VuMeter extends StatelessWidget {
     this.isDownloading = false,
   });
 
-  static const int barCount = 28;
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
     final pct = (progress * 100).clamp(0, 100).floor();
-    final litBars = (progress * barCount).round();
 
     final label = isDownloading
         ? '$pct% · $speedText'
@@ -34,8 +30,9 @@ class VuMeter extends StatelessWidget {
         ? (etaText.isNotEmpty ? 'ETA $etaText' : 'ETA —:—')
         : (progress >= 1.0 ? 'ETA 0:00' : 'ETA —:—');
 
-    final bgBar = isDark ? SpideyColors.darkBgWell : SpideyColors.lightBgWell;
-    final borderBar = isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder;
+    final trackColor = isDark ? const Color(0xFF1E2631) : const Color(0xFFE2E8F0);
+    final textNorm = isDark ? SpideyColors.darkText : SpideyColors.lightText;
+    final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
 
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 580),
@@ -43,76 +40,90 @@ class VuMeter extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-        // Top label row
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 11,
-                letterSpacing: 0.5,
-                color: isDark ? SpideyColors.darkText : SpideyColors.lightText,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            Text(
-              eta,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 11,
-                letterSpacing: 0.5,
-                color: isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-
-        // 28 segmented vertical bars
-        SizedBox(
-          height: 22,
-          child: Row(
-            children: List.generate(barCount, (i) {
-              final isLit = i < litBars;
-              // Threshold colors
-              Color barColor;
-              if (i > barCount * 0.85) {
-                barColor = SpideyColors.spideyGold; // Peak
-              } else if (i > barCount * 0.6) {
-                barColor = SpideyColors.spideyBlue; // Hot
-              } else {
-                barColor = SpideyColors.spideyRed; // Normal
-              }
-
-              // Dynamic fill height
-              final fillPercent = isLit
-                  ? (isDownloading ? 0.45 + (math.Random(i + pct).nextDouble() * 0.55) : 1.0)
-                  : 0.0;
-
-              return Expanded(
-                child: Container(
-                  margin: EdgeInsets.only(right: i == barCount - 1 ? 0 : 3),
-                  decoration: BoxDecoration(
-                    color: bgBar,
-                    border: Border.all(color: borderBar, width: 1),
-                  ),
-                  alignment: Alignment.bottomCenter,
-                  child: FractionallySizedBox(
-                    widthFactor: 1.0,
-                    heightFactor: fillPercent,
-                    child: Container(
-                      color: barColor,
+          // Header info
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isDownloading
+                          ? SpideyColors.spideyRedGlow
+                          : (progress >= 1.0 ? const Color(0x3322C55E) : Colors.transparent),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        letterSpacing: 0.3,
+                        color: isDownloading
+                            ? SpideyColors.spideyRed
+                            : (progress >= 1.0 ? SpideyColors.spideyGreen : textNorm),
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
+                ],
+              ),
+              Text(
+                eta,
+                style: TextStyle(
+                  fontSize: 11,
+                  letterSpacing: 0.2,
+                  color: textDim,
+                  fontWeight: FontWeight.w500,
                 ),
-              );
-            }),
+              ),
+            ],
           ),
-        ),
-      ],
-    ),
-  );
-}
+          const SizedBox(height: 8),
+
+          // Smooth modern continuous progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: Container(
+              height: 10,
+              decoration: BoxDecoration(
+                color: trackColor,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Stack(
+                children: [
+                  FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: progress.clamp(0.0, 1.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isDownloading
+                              ? [SpideyColors.spideyRed, const Color(0xFFFF5258)]
+                              : (progress >= 1.0
+                                  ? [SpideyColors.spideyGreen, const Color(0xFF4ADE80)]
+                                  : [SpideyColors.spideyRed, SpideyColors.spideyRed]),
+                        ),
+                        borderRadius: BorderRadius.circular(6),
+                        boxShadow: isDownloading
+                            ? [
+                                BoxShadow(
+                                  color: SpideyColors.spideyRed.withValues(alpha: 0.4),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ]
+                            : null,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

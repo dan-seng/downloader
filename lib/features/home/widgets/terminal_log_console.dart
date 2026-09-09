@@ -16,6 +16,7 @@ class TerminalLogConsole extends StatefulWidget {
 
 class _TerminalLogConsoleState extends State<TerminalLogConsole> {
   final ScrollController _scrollController = ScrollController();
+  bool _isExpanded = false;
 
   @override
   void didUpdateWidget(covariant TerminalLogConsole oldWidget) {
@@ -44,11 +45,11 @@ class _TerminalLogConsoleState extends State<TerminalLogConsole> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final bgWell = isDark ? SpideyColors.darkBgWell : SpideyColors.lightBgWell;
+    final bgWell = isDark ? const Color(0xFF0F141C) : const Color(0xFFF1F5F9);
     final borderColor = isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder;
     final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
 
-    const consoleHeight = 130.0;
+    final latestLog = widget.logs.isNotEmpty ? widget.logs.last : 'Ready';
 
     return Container(
       decoration: BoxDecoration(
@@ -57,60 +58,108 @@ class _TerminalLogConsoleState extends State<TerminalLogConsole> {
           top: BorderSide(color: borderColor, width: 1),
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'SUBPROCESS OUTPUT',
-                style: TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5,
-                  color: textDim,
-                ),
-              ),
-              Text(
-                'yt-dlp v2026.08.12',
-                style: TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 10,
-                  color: textDim,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // Log Lines
-          SizedBox(
-            height: consoleHeight,
-            child: widget.logs.isEmpty
-                ? Align(
-                    alignment: Alignment.topLeft,
-                    child: Text(
-                      'deck ready — waiting for a link',
-                      style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 11.5,
+          // Collapsible Header Bar
+          InkWell(
+            onTap: () {
+              setState(() {
+                _isExpanded = !_isExpanded;
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.terminal,
+                        size: 14,
                         color: textDim,
                       ),
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    itemCount: widget.logs.length,
-                    itemBuilder: (context, index) {
-                      final line = widget.logs[index];
-                      return _buildLogLine(line, isDark);
-                    },
+                      const SizedBox(width: 8),
+                      Text(
+                        'SUBPROCESS OUTPUT',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                          color: textDim,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      if (!_isExpanded)
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 400),
+                          child: Text(
+                            latestLog,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: textDim.withValues(alpha: 0.8),
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'spidey_engine · ${widget.logs.length} logs',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          color: textDim,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        _isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
+                        size: 16,
+                        color: textDim,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
+
+          // Log Lines (When expanded)
+          if (_isExpanded) ...[
+            const Divider(height: 1, thickness: 1),
+            Container(
+              height: 130,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: widget.logs.isEmpty
+                  ? Align(
+                      alignment: Alignment.topLeft,
+                      child: Text(
+                        'deck ready — waiting for a link',
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 11.5,
+                          color: textDim,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _scrollController,
+                      itemCount: widget.logs.length,
+                      itemBuilder: (context, index) {
+                        final line = widget.logs[index];
+                        return _buildLogLine(line, isDark);
+                      },
+                    ),
+            ),
+          ],
         ],
       ),
     );
