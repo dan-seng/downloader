@@ -58,6 +58,8 @@ class VideoDownloaderApp extends StatelessWidget {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: currentMode,
+          themeAnimationDuration: const Duration(milliseconds: 300),
+          themeAnimationCurve: Curves.easeInOutCubic,
           home: HomeScreen(
             videoController: videoController,
             downloadController: downloadController,

@@ -9,6 +9,7 @@ import 'package:video_downloader/models/download_task.dart';
 import 'package:video_downloader/models/playlist_info.dart';
 import 'package:video_downloader/models/quality_option.dart';
 import 'package:video_downloader/models/speed_limit.dart';
+import 'package:video_downloader/models/time_range_clip.dart';
 import 'package:video_downloader/models/video_info.dart';
 import 'package:video_downloader/services/download_service.dart';
 import 'package:video_downloader/services/process_service.dart';
@@ -77,6 +78,7 @@ class MockBatchDownloadService extends DownloadService {
     DownloadLogCallback? onLog,
     AudioConfig? audioConfig,
     SpeedLimit? speedLimit,
+    TimeRangeClip? clip,
   }) async {
     _isDownloading = true;
     onLog?.call('[spidey_engine] Downloading track ${video.title}');

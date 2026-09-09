@@ -8,10 +8,16 @@ import '../../../models/download_task.dart';
 import '../../../models/playlist_info.dart';
 import '../../../models/quality_option.dart';
 import '../../../models/speed_limit.dart';
+import '../../../models/time_range_clip.dart';
+import '../../../models/video_info.dart';
 import '../../downloads/widgets/vu_meter.dart';
 import '../widgets/reel_spinner.dart';
 import '../widgets/terminal_log_console.dart';
 import '../widgets/web_corner_painter.dart';
+import '../../archive/presentation/archive_deck.dart';
+
+/// Active main panel view mode.
+enum HomeDeckView { deck, archive }
 
 /// SPIDEY_DLX — Web-Slinging Desktop Video Grabber Deck.
 class HomeScreen extends StatefulWidget {
@@ -33,12 +39,21 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late final TextEditingController _urlController;
   bool _isSidebarVisible = true;
+  HomeDeckView _activeView = HomeDeckView.deck;
+  Map<String, String> _quickDirs = const {};
 
   @override
   void initState() {
     super.initState();
     _urlController = TextEditingController();
-    widget.downloadController.initialize();
+    widget.downloadController.initialize().then((_) async {
+      final dirs = await widget.downloadController.getQuickDirectories();
+      if (mounted) {
+        setState(() {
+          _quickDirs = dirs;
+        });
+      }
+    });
     widget.videoController.addListener(_onVideoControllerChanged);
   }
 
@@ -78,6 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onAnalyze() {
+    if (widget.videoController.isLoading) return;
     final text = _urlController.text.trim();
     if (text.isNotEmpty) {
       widget.downloadController.addLog('\$ spidey-fetch $text');
@@ -97,7 +113,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: bgDeep,
       body: SizedBox.expand(
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOutCubic,
           color: bgPanel,
           child: Stack(
             children: [
@@ -125,23 +143,48 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // Left: Queue Sidebar (responsive width)
-                            if (_isSidebarVisible) ...[
-                              SizedBox(
-                                width: sidebarWidth,
-                                child: _buildQueueSidebar(context, isDark, videoCtrl, dlCtrl),
+                            // Left: Queue Sidebar (responsive width, smooth slide animation)
+                            ClipRect(
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 250),
+                                curve: Curves.easeInOutCubic,
+                                width: _isSidebarVisible ? (sidebarWidth + 1) : 0,
+                                child: OverflowBox(
+                                  minWidth: sidebarWidth + 1,
+                                  maxWidth: sidebarWidth + 1,
+                                  alignment: Alignment.topLeft,
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: sidebarWidth,
+                                        child: _buildQueueSidebar(context, isDark, videoCtrl, dlCtrl),
+                                      ),
+                                      VerticalDivider(
+                                        width: 1,
+                                        thickness: 1,
+                                        color: borderColor,
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                              // Vertical Divider
-                              VerticalDivider(
-                                width: 1,
-                                thickness: 1,
-                                color: borderColor,
-                              ),
-                            ],
+                            ),
 
-                            // Right: Main Deck Column
+                            // Right: Main Deck Column (Deck or Archive Vault)
                             Expanded(
-                              child: _buildMainDeck(context, isDark, videoCtrl, dlCtrl),
+                              child: _activeView == HomeDeckView.deck
+                                  ? _buildMainDeck(context, isDark, videoCtrl, dlCtrl)
+                                  : ArchiveDeck(
+                                      downloadController: dlCtrl,
+                                      isDark: isDark,
+                                      onReDownload: (url) {
+                                        _urlController.text = url;
+                                        videoCtrl.analyzeUrl(url);
+                                        setState(() {
+                                          _activeView = HomeDeckView.deck;
+                                        });
+                                      },
+                                    ),
                             ),
                           ],
                         ),
@@ -201,22 +244,24 @@ class _HomeScreenState extends State<HomeScreen> {
     Color dotColor = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
     if (isFetching) {
       statusText = 'FETCHING';
-      dotColor = SpideyColors.spideyBlue;
+      dotColor = isDark ? const Color(0xFFCCCCCC) : const Color(0xFF555555);
     } else if (isBatch) {
       statusText = 'BATCH (${dlCtrl.batchCurrentIndex + 1}/${dlCtrl.batchQueue.length})';
-      dotColor = SpideyColors.spideyRed;
+      dotColor = textHi;
     } else if (isDownloading) {
       statusText = 'DOWNLOADING';
-      dotColor = SpideyColors.spideyRed;
+      dotColor = textHi;
     } else if (isDone) {
       statusText = 'COMPLETE';
-      dotColor = SpideyColors.spideyGreen;
+      dotColor = isDark ? const Color(0xFFCCCCCC) : const Color(0xFF555555);
     }
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOutCubic,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF161B22) : Colors.white,
+        color: isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel,
         border: Border(bottom: BorderSide(color: borderColor, width: 1)),
         boxShadow: [
           BoxShadow(
@@ -245,7 +290,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ReelSpinner(
                 isSpinning: isDownloading,
                 reelColor: isDark ? SpideyColors.darkBorderLit : SpideyColors.lightBorderLit,
-                spokeColor: SpideyColors.spideyRed,
+                spokeColor: textHi,
                 size: 26,
               ),
               const SizedBox(width: 12),
@@ -261,12 +306,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         letterSpacing: -0.2,
                         color: textHi,
                       ),
-                      children: const [
-                        TextSpan(text: 'SPIDEY'),
+                      children: [
+                        const TextSpan(text: 'SPIDEY'),
                         TextSpan(
                           text: '_DLX',
                           style: TextStyle(
-                            color: SpideyColors.spideyRed,
+                            color: isDark ? const Color(0xFF888888) : const Color(0xFF666666),
                             fontWeight: FontWeight.w900,
                           ),
                         ),
@@ -275,7 +320,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 1),
                   Text(
-                    'WEB-SLINGING VIDEO GRABBER · WIN / LINUX',
+                    'WEB-SLINGING VIDEO GRABBER',
                     style: TextStyle(
                       fontSize: 9.5,
                       fontWeight: FontWeight.w500,
@@ -288,9 +333,150 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
 
-          // Actions: Throttle, Schedule, Theme Switcher & Status Pill
-          Row(
-            children: [
+          // Actions: View Switcher, Notifications, Throttle, Schedule, Theme Switcher & Status Pill
+          Flexible(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+              // View Switcher Pill: DECK vs ARCHIVE
+              Container(
+                padding: const EdgeInsets.all(2),
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: bgWell,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      key: const ValueKey('view_tab_deck'),
+                      onTap: () => setState(() => _activeView = HomeDeckView.deck),
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _activeView == HomeDeckView.deck
+                              ? (isDark ? Colors.white : Colors.black)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.bolt,
+                              size: 13,
+                              color: _activeView == HomeDeckView.deck
+                                  ? (isDark ? Colors.black : Colors.white)
+                                  : textDim,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'DECK',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: _activeView == HomeDeckView.deck
+                                    ? (isDark ? Colors.black : Colors.white)
+                                    : textDim,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      key: const ValueKey('view_tab_archive'),
+                      onTap: () => setState(() => _activeView = HomeDeckView.archive),
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _activeView == HomeDeckView.archive
+                              ? (isDark ? Colors.white : Colors.black)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.inventory_2_outlined,
+                              size: 13,
+                              color: _activeView == HomeDeckView.archive
+                                  ? (isDark ? Colors.black : Colors.white)
+                                  : textDim,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'ARCHIVE (${dlCtrl.archiveItems.length})',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: _activeView == HomeDeckView.archive
+                                    ? (isDark ? Colors.black : Colors.white)
+                                    : textDim,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Desktop Notifications Toggle Pill
+              Tooltip(
+                message: dlCtrl.notificationsEnabled
+                    ? 'Desktop Notifications: ON (Audio alert + Open File actions)'
+                    : 'Desktop Notifications: MUTED',
+                child: InkWell(
+                  key: const ValueKey('faceplate_notification_toggle'),
+                  onTap: () => dlCtrl.setNotificationsEnabled(!dlCtrl.notificationsEnabled),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: bgWell,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: dlCtrl.notificationsEnabled
+                            ? (isDark ? Colors.white : Colors.black)
+                            : borderColor,
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          dlCtrl.notificationsEnabled
+                              ? Icons.notifications_active_outlined
+                              : Icons.notifications_off_outlined,
+                          size: 13,
+                          color: dlCtrl.notificationsEnabled ? textHi : textDim,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          dlCtrl.notificationsEnabled ? 'NOTIF' : 'MUTED',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: dlCtrl.notificationsEnabled ? textHi : textDim,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
               // Bandwidth Limiter / Throttle Pill
               PopupMenuButton<SpeedLimit>(
                 key: const ValueKey('faceplate_throttle_button'),
@@ -312,12 +498,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              color: isSelected ? SpideyColors.spideyRed : textHi,
+                              color: textHi,
                             ),
                           ),
                         ),
                         if (isSelected)
-                          const Icon(Icons.check, size: 14, color: SpideyColors.spideyRed),
+                          Icon(Icons.check, size: 14, color: textHi),
                       ],
                     ),
                   );
@@ -330,7 +516,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: dlCtrl.speedLimit.isThrottled
-                          ? SpideyColors.spideyRed
+                          ? (isDark ? Colors.white : Colors.black)
                           : borderColor,
                       width: 1,
                     ),
@@ -344,7 +530,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: dlCtrl.speedLimit.isThrottled
-                              ? SpideyColors.spideyRed
+                              ? textHi
                               : (isDark ? SpideyColors.darkText : SpideyColors.lightText),
                         ),
                       ),
@@ -380,12 +566,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              color: isSelected ? SpideyColors.spideyBlue : textHi,
+                              color: textHi,
                             ),
                           ),
                         ),
                         if (isSelected)
-                          const Icon(Icons.check, size: 14, color: SpideyColors.spideyBlue),
+                          Icon(Icons.check, size: 14, color: textHi),
                       ],
                     ),
                   );
@@ -398,7 +584,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: dlCtrl.scheduleDelay.isDelayed
-                          ? SpideyColors.spideyBlue
+                          ? (isDark ? Colors.white : Colors.black)
                           : borderColor,
                       width: 1,
                     ),
@@ -412,7 +598,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: dlCtrl.scheduleDelay.isDelayed
-                              ? SpideyColors.spideyBlue
+                              ? textHi
                               : (isDark ? SpideyColors.darkText : SpideyColors.lightText),
                         ),
                       ),
@@ -427,30 +613,70 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              // Theme Toggle Button
-              InkWell(
-                borderRadius: BorderRadius.circular(20),
-                onTap: _toggleTheme,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-                  margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(
-                    color: bgWell,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: borderColor, width: 1),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        isDark ? '🌙 DARK' : '☀️ LIGHT',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? SpideyColors.darkText : SpideyColors.lightText,
+              // Destination Folder Pill
+              _buildFaceplateFolderPill(context, isDark, dlCtrl),
+
+              // Theme Toggle Switch (Pill toggle matching screenshot)
+              Tooltip(
+                message: isDark ? 'Switch to Light mode' : 'Switch to Dark mode',
+                child: GestureDetector(
+                  onTap: _toggleTheme,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOutCubic,
+                        width: 50,
+                        height: 28,
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF383838) : const Color(0xFFD6D3CC),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: AnimatedAlign(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOutCubic,
+                          alignment: isDark ? Alignment.centerRight : Alignment.centerLeft,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOutCubic,
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isDark ? const Color(0xFF141414) : Colors.white,
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x33000000),
+                                  blurRadius: 3,
+                                  offset: Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              transitionBuilder: (child, animation) {
+                                return RotationTransition(
+                                  turns: animation,
+                                  child: FadeTransition(
+                                    opacity: animation,
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: Icon(
+                                isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+                                key: ValueKey<bool>(isDark),
+                                size: 13,
+                                color: isDark ? Colors.white : Colors.black,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -496,9 +722,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-        ],
+        ),
       ),
-    );
+    ],
+  ),
+);
   }
 
   Widget _buildQueueSidebar(
@@ -516,7 +744,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final playlist = videoCtrl.currentPlaylist!;
       final totalCount = playlist.totalCount;
 
-      return Container(
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOutCubic,
         color: bgWell,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -659,7 +889,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final recentQueue = dlCtrl.recentQueue;
     final totalCount = (currentVideo != null ? 1 : 0) + recentQueue.length;
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOutCubic,
       color: bgWell,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -773,9 +1005,10 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isDimmed = false,
   }) {
     final borderColor = isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder;
-    final bgRaised = isDark ? const Color(0xFF1E2633) : const Color(0xFFEDF2F7);
+    final bgRaised = isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised;
     final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
     final textNorm = isDark ? SpideyColors.darkText : SpideyColors.lightText;
+    final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
 
     return Opacity(
       opacity: isDimmed ? 0.45 : 1.0,
@@ -785,7 +1018,7 @@ class _HomeScreenState extends State<HomeScreen> {
           color: isActive ? bgRaised : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           border: isActive
-              ? Border.all(color: SpideyColors.spideyRed.withValues(alpha: 0.3), width: 1)
+              ? Border.all(color: isDark ? const Color(0xFF555555) : const Color(0xFF999999), width: 1)
               : Border.all(color: Colors.transparent, width: 1),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -799,7 +1032,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: isActive ? SpideyColors.spideyRed : textDim,
+                  color: isActive ? textHi : textDim,
                 ),
               ),
             ),
@@ -826,12 +1059,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: isDone
-                              ? SpideyColors.spideyGreen.withValues(alpha: 0.12)
-                              : (isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised),
+                              ? (isDark ? const Color(0xFF2E2E2E) : const Color(0xFFE5E5E5))
+                              : bgRaised,
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
                             color: isDone
-                                ? SpideyColors.spideyGreen.withValues(alpha: 0.4)
+                                ? (isDark ? const Color(0xFF555555) : const Color(0xFFBBBBBB))
                                 : borderColor,
                           ),
                         ),
@@ -839,7 +1072,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           tag,
                           style: TextStyle(
                             fontSize: 9.5,
-                            color: isDone ? SpideyColors.spideyGreen : textDim,
+                            color: isDone ? textHi : textDim,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -922,10 +1155,12 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 18),
 
               // Transport & Telemetry Card
-              Container(
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOutCubic,
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF161B22) : Colors.white,
+                  color: isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: borderColor, width: 1),
                   boxShadow: [
@@ -949,10 +1184,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               : null,
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-                            backgroundColor: SpideyColors.spideyRed,
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor: isDark ? const Color(0xFF261014) : const Color(0xFFFFECEE),
-                            disabledForegroundColor: SpideyColors.spideyRed.withValues(alpha: 0.5),
+                            backgroundColor: isDark ? Colors.white : Colors.black,
+                            foregroundColor: isDark ? Colors.black : Colors.white,
+                            disabledBackgroundColor: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFE5E5E5),
+                            disabledForegroundColor: isDark ? const Color(0xFF555555) : const Color(0xFF999999),
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
@@ -965,8 +1200,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 isDownloading ? Icons.sync : Icons.arrow_downward,
                                 size: 16,
                                 color: (currentVideo != null && !isDownloading)
-                                    ? Colors.white
-                                    : SpideyColors.spideyRed.withValues(alpha: 0.7),
+                                    ? (isDark ? Colors.black : Colors.white)
+                                    : (isDark ? const Color(0xFF555555) : const Color(0xFF999999)),
                               ),
                               const SizedBox(width: 8),
                               Text(
@@ -986,8 +1221,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             onPressed: dlCtrl.cancelDownload,
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                              foregroundColor: SpideyColors.spideyRed,
-                              side: BorderSide(color: SpideyColors.spideyRed.withValues(alpha: 0.5), width: 1),
+                              foregroundColor: textHi,
+                              side: BorderSide(color: isDark ? const Color(0xFF555555) : const Color(0xFF999999), width: 1),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
                               ),
@@ -1024,7 +1259,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF1E2633) : const Color(0xFFF1F5F9),
+                          color: isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: borderLit),
                         ),
@@ -1053,8 +1288,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
                                     color: isDownloading
-                                        ? SpideyColors.spideyRed
-                                        : (currentVideo != null ? SpideyColors.spideyBlue : textNorm),
+                                        ? textHi
+                                        : (currentVideo != null ? textHi : textNorm),
                                   ),
                                 ),
                               ],
@@ -1092,21 +1327,45 @@ class _HomeScreenState extends State<HomeScreen> {
                               dlCtrl: dlCtrl,
                               key: const ValueKey('main_telemetry_schedule'),
                             ),
+                            Row(
+                              key: const ValueKey('main_telemetry_trim'),
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'TRIM: ',
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: textDim,
+                                  ),
+                                ),
+                                Text(
+                                  dlCtrl.clip.isEnabled
+                                      ? dlCtrl.clip.formatSummary()
+                                      : 'FULL MEDIA',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: dlCtrl.clip.isEnabled ? textHi : textNorm,
+                                  ),
+                                ),
+                              ],
+                            ),
                             InkWell(
                               onTap: dlCtrl.openFolder,
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
-                                children: const [
+                                children: [
                                   Text(
                                     'DESTINATION ↴',
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.bold,
-                                      color: SpideyColors.spideyRed,
+                                      color: textHi,
                                     ),
                                   ),
-                                  SizedBox(width: 4),
-                                  Icon(Icons.open_in_new, size: 12, color: SpideyColors.spideyRed),
+                                  const SizedBox(width: 4),
+                                  Icon(Icons.open_in_new, size: 12, color: textHi),
                                 ],
                               ),
                             ),
@@ -1129,12 +1388,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildUrlRow(BuildContext context, bool isDark, VideoController videoCtrl) {
-    final bgWell = isDark ? const Color(0xFF161B22) : Colors.white;
+    final bgWell = isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel;
     final borderColor = isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder;
     final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
     final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOutCubic,
       decoration: BoxDecoration(
         color: bgWell,
         borderRadius: BorderRadius.circular(14),
@@ -1156,6 +1417,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: TextField(
               controller: _urlController,
+              enabled: !videoCtrl.isLoading,
               onSubmitted: (_) => _onAnalyze(),
               onChanged: (_) => setState(() {}),
               style: TextStyle(
@@ -1163,7 +1425,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: textHi,
               ),
               decoration: InputDecoration(
-                hintText: 'https://youtu.be/... or video link',
+                hintText: 'Paste video, audio, or playlist link...',
                 hintStyle: TextStyle(
                   fontSize: 13,
                   color: textDim,
@@ -1176,7 +1438,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-          if (_urlController.text.isNotEmpty)
+          if (_urlController.text.isNotEmpty && !videoCtrl.isLoading)
             IconButton(
               icon: Icon(Icons.clear, size: 16, color: textDim),
               onPressed: () {
@@ -1188,29 +1450,38 @@ class _HomeScreenState extends State<HomeScreen> {
           ElevatedButton(
             onPressed: videoCtrl.isLoading ? null : _onAnalyze,
             style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-              backgroundColor: SpideyColors.spideyRed,
-              foregroundColor: Colors.white,
+              padding: videoCtrl.isLoading
+                  ? EdgeInsets.zero
+                  : const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+              fixedSize: videoCtrl.isLoading ? const Size(44, 44) : null,
+              shape: videoCtrl.isLoading
+                  ? const CircleBorder()
+                  : RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+              backgroundColor: isDark ? Colors.white : Colors.black,
+              foregroundColor: isDark ? Colors.black : Colors.white,
+              disabledBackgroundColor: isDark ? Colors.white : Colors.black,
+              disabledForegroundColor: isDark ? Colors.black : Colors.white,
               elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
             ),
             child: videoCtrl.isLoading
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
                     child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
+                      strokeWidth: 2.5,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isDark ? Colors.black : Colors.white,
+                      ),
                     ),
                   )
                 : Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.search, size: 16, color: Colors.white),
-                      SizedBox(width: 6),
-                      Text(
+                    children: [
+                      Icon(Icons.search, size: 16, color: isDark ? Colors.black : Colors.white),
+                      const SizedBox(width: 6),
+                      const Text(
                         'ANALYZE',
                         style: TextStyle(
                           fontSize: 12,
@@ -1232,7 +1503,7 @@ class _HomeScreenState extends State<HomeScreen> {
     VideoController videoCtrl,
     DownloadController dlCtrl,
   ) {
-    final bgWell = isDark ? const Color(0xFF161B22) : Colors.white;
+    final bgWell = isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel;
     final bgRaised = isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised;
     final borderColor = isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder;
     final borderLit = isDark ? SpideyColors.darkBorderLit : SpideyColors.lightBorderLit;
@@ -1247,7 +1518,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final video = videoCtrl.currentVideo;
 
     if (video == null) {
-      return Container(
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOutCubic,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: bgWell,
@@ -1296,6 +1569,97 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: textDim,
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.folder_outlined, size: 14, color: textDim),
+                          const SizedBox(width: 5),
+                          Text(
+                            'DESTINATION  ',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: textDim,
+                            ),
+                          ),
+                          Flexible(
+                            child: Text(
+                              dlCtrl.downloadDirectory.isNotEmpty
+                                  ? dlCtrl.downloadDirectory
+                                  : 'Resolving destination...',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: textNorm,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      InkWell(
+                        onTap: dlCtrl.pickDirectory,
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                          decoration: BoxDecoration(
+                            color: bgRaised,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: borderLit),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.folder, size: 12, color: textHi),
+                              const SizedBox(width: 4),
+                              Text(
+                                'CHOOSE FOLDER',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: textHi,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (dlCtrl.downloadDirectory.isNotEmpty)
+                        InkWell(
+                          onTap: dlCtrl.openFolder,
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                            decoration: BoxDecoration(
+                              color: bgRaised,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: borderLit),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.open_in_new, size: 12, color: textDim),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'OPEN',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: textDim,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -1304,7 +1668,9 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOutCubic,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: bgWell,
@@ -1523,59 +1889,119 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
                 const SizedBox(height: 14),
 
-                // Saving To line + platform tag
-                InkWell(
-                  onTap: dlCtrl.isDownloading ? null : dlCtrl.pickDirectory,
-                  child: Row(
-                    children: [
-                      Icon(Icons.folder_open, size: 15, color: textDim),
-                      const SizedBox(width: 5),
-                      Text(
-                        'SAVING TO  ',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: textDim,
-                        ),
-                      ),
-                      Flexible(
-                        child: Text(
-                          dlCtrl.downloadDirectory.isNotEmpty
-                              ? dlCtrl.downloadDirectory
-                              : '~/Downloads',
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: textNorm,
+                // Video Trimmer & Clip Slicer Deck
+                _buildClipTrimmerDeck(context, isDark, video, dlCtrl),
+                const SizedBox(height: 14),
+
+                // Saving To line + action buttons
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    InkWell(
+                      onTap: dlCtrl.isDownloading ? null : dlCtrl.pickDirectory,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.folder_open, size: 15, color: textDim),
+                          const SizedBox(width: 5),
+                          Text(
+                            'SAVING TO  ',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: textDim,
+                            ),
                           ),
-                        ),
+                          Flexible(
+                            child: Text(
+                              dlCtrl.downloadDirectory.isNotEmpty
+                                  ? dlCtrl.downloadDirectory
+                                  : 'Resolving destination...',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: textNorm,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        '  · target: ',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: textDim,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                    ),
+                    InkWell(
+                      onTap: dlCtrl.isDownloading ? null : dlCtrl.pickDirectory,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                         decoration: BoxDecoration(
                           color: bgRaised,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(6),
                           border: Border.all(color: borderLit),
                         ),
-                        child: Text(
-                          io.Platform.isWindows ? 'Windows' : 'Linux',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.bold,
-                            color: textHi,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.folder, size: 12, color: textHi),
+                            const SizedBox(width: 4),
+                            Text(
+                              'CHANGE',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: textHi,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (dlCtrl.downloadDirectory.isNotEmpty)
+                      InkWell(
+                        onTap: dlCtrl.openFolder,
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: bgRaised,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: borderLit),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.open_in_new, size: 12, color: textDim),
+                              const SizedBox(width: 4),
+                              Text(
+                                'OPEN',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: textDim,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: bgRaised,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: borderLit),
+                      ),
+                      child: Text(
+                        io.Platform.isWindows ? 'Windows' : 'Linux',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: textHi,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1591,29 +2017,32 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isDark,
     VoidCallback onDismiss,
   ) {
+    final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
+    final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF261014) : const Color(0xFFFFECEE),
+        color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: SpideyColors.spideyRedDim, width: 1),
+        border: Border.all(color: isDark ? const Color(0xFF444444) : const Color(0xFFCCCCCC), width: 1),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline, size: 16, color: SpideyColors.spideyRed),
+          Icon(Icons.error_outline, size: 16, color: textHi),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: SpideyColors.spideyRed,
+                color: textHi,
               ),
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close, size: 14, color: SpideyColors.spideyRed),
+            icon: Icon(Icons.close, size: 14, color: textDim),
             onPressed: onDismiss,
           ),
         ],
@@ -1627,25 +2056,49 @@ class _HomeScreenState extends State<HomeScreen> {
     DownloadController dlCtrl,
   ) {
     final borderColor = isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder;
-    final bgWell = isDark ? const Color(0xFF161B22) : Colors.white;
+    final bgWell = isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel;
     final bgRaised = isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised;
     final borderLit = isDark ? SpideyColors.darkBorderLit : SpideyColors.lightBorderLit;
     final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
     final textNorm = isDark ? SpideyColors.darkText : SpideyColors.lightText;
+    final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
 
     final historyTasks = dlCtrl.recentQueue;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'HISTORY',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.8,
-            color: textDim,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'SESSION HISTORY',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+                color: textDim,
+              ),
+            ),
+            InkWell(
+              key: const ValueKey('history_expand_archive_button'),
+              onTap: () => setState(() => _activeView = HomeDeckView.archive),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'VIEW FULL ARCHIVE (${dlCtrl.archiveItems.length}) ↴',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                      color: textHi,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
         if (historyTasks.isEmpty)
@@ -1721,12 +2174,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         onTap: dlCtrl.openFolder,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
-                          children: const [
+                          children: [
                             Text(
                               'open folder ↴',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: SpideyColors.spideyRed,
+                                color: textHi,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -1794,10 +2247,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
 
               // Playlist Overview & Format Selector Card
-              Container(
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOutCubic,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF161B22) : Colors.white,
+                  color: isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: borderColor, width: 1),
                   boxShadow: [
@@ -1818,13 +2273,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           width: 48,
                           height: 48,
                           decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF261014) : const Color(0xFFFFECEE),
+                            color: isDark ? const Color(0xFF222222) : const Color(0xFFEAEAEA),
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: SpideyColors.spideyRedDim),
+                            border: Border.all(color: isDark ? const Color(0xFF444444) : const Color(0xFFCCCCCC)),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.playlist_play,
-                            color: SpideyColors.spideyRed,
+                            color: textHi,
                             size: 28,
                           ),
                         ),
@@ -1897,14 +2352,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                     fontWeight: FontWeight.w500,
                                     color: textHi,
                                   ),
-                                  items: const [
-                                    DropdownMenuItem(
+                                  items: [
+                                    const DropdownMenuItem(
                                       value: 'mp4',
                                       child: Text('MP4 — Video + Audio'),
                                     ),
                                     DropdownMenuItem(
                                       value: 'm4a',
-                                      child: Text('MP3 — Audio Only'),
+                                      child: Text('${dlCtrl.audioConfig.format.id.toUpperCase()} — Audio Only'),
                                     ),
                                   ],
                                   onChanged: isBatchRunning
@@ -1988,45 +2443,99 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                     const SizedBox(height: 14),
 
-                    // Destination Path
-                    InkWell(
-                      onTap: isBatchRunning ? null : dlCtrl.pickDirectory,
-                      child: Row(
-                        children: [
-                          Icon(Icons.folder_open, size: 15, color: textDim),
-                          const SizedBox(width: 5),
-                          Text(
-                            'SAVING TO  ',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: textDim,
+                    // Destination Path + action buttons
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        InkWell(
+                          onTap: isBatchRunning ? null : dlCtrl.pickDirectory,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.folder_open, size: 15, color: textDim),
+                              const SizedBox(width: 5),
+                              Text(
+                                'SAVING TO  ',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: textDim,
+                                ),
+                              ),
+                              Flexible(
+                                child: Text(
+                                  dlCtrl.downloadDirectory.isNotEmpty
+                                      ? dlCtrl.downloadDirectory
+                                      : '~/Downloads',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: textNorm,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        InkWell(
+                          onTap: isBatchRunning ? null : dlCtrl.pickDirectory,
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: bgRaised,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: borderLit),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.folder, size: 12, color: textHi),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'CHANGE',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: textHi,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          Flexible(
-                            child: Text(
-                              dlCtrl.downloadDirectory.isNotEmpty
-                                  ? dlCtrl.downloadDirectory
-                                  : '~/Downloads',
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: textNorm,
+                        ),
+                        if (dlCtrl.downloadDirectory.isNotEmpty)
+                          InkWell(
+                            onTap: dlCtrl.openFolder,
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: bgRaised,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: borderLit),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.open_in_new, size: 12, color: textDim),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'OPEN',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: textDim,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          const Text(
-                            '· [CHANGE FOLDER]',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: SpideyColors.spideyBlue,
-                            ),
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
                   ],
                 ),
@@ -2034,9 +2543,11 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 16),
 
               // Selection Toolbar & Tracklist Card
-              Container(
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOutCubic,
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF161B22) : Colors.white,
+                  color: isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: borderColor, width: 1),
                   boxShadow: [
@@ -2055,7 +2566,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1E2633) : const Color(0xFFF1F5F9),
+                        color: isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised,
                         border: Border(bottom: BorderSide(color: borderColor, width: 1)),
                       ),
                       child: Row(
@@ -2107,10 +2618,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           const Spacer(),
                           Text(
                             '${playlist.selectedCount} OF ${playlist.totalCount} SELECTED',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: SpideyColors.spideyRed,
+                              color: textHi,
                               letterSpacing: 0.5,
                             ),
                           ),
@@ -2145,7 +2656,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 : () => videoCtrl.togglePlaylistItem(i),
                             child: Container(
                               color: isDownloadingThis
-                                  ? (isDark ? const Color(0xFF241419) : const Color(0xFFFFECEE))
+                                  ? (isDark ? const Color(0xFF242424) : const Color(0xFFEEEEEE))
                                   : (item.isSelected ? Colors.transparent : (isDark ? Colors.black26 : Colors.black12)),
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                               child: Row(
@@ -2156,8 +2667,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                     height: 24,
                                     child: Checkbox(
                                       value: item.isSelected,
-                                      activeColor: SpideyColors.spideyRed,
-                                      checkColor: Colors.white,
+                                      activeColor: isDark ? Colors.white : Colors.black,
+                                      checkColor: isDark ? Colors.black : Colors.white,
                                       onChanged: isBatchRunning
                                           ? null
                                           : (_) => videoCtrl.togglePlaylistItem(i),
@@ -2196,15 +2707,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                       decoration: BoxDecoration(
-                                        color: SpideyColors.spideyRed,
+                                        color: isDark ? Colors.white : Colors.black,
                                         borderRadius: BorderRadius.circular(4),
                                       ),
-                                      child: const Text(
+                                      child: Text(
                                         'DOWNLOADING',
                                         style: TextStyle(
                                           fontSize: 9.5,
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.white,
+                                          color: isDark ? Colors.black : Colors.white,
                                         ),
                                       ),
                                     )
@@ -2212,16 +2723,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                       decoration: BoxDecoration(
-                                        color: SpideyColors.spideyGreen.withValues(alpha: 0.12),
+                                        color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE5E5E5),
                                         borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(color: SpideyColors.spideyGreen.withValues(alpha: 0.4)),
+                                        border: Border.all(color: isDark ? const Color(0xFF555555) : const Color(0xFFCCCCCC)),
                                       ),
-                                      child: const Text(
+                                      child: Text(
                                         'DONE',
                                         style: TextStyle(
                                           fontSize: 9.5,
                                           fontWeight: FontWeight.bold,
-                                          color: SpideyColors.spideyGreen,
+                                          color: textHi,
                                         ),
                                       ),
                                     )
@@ -2229,16 +2740,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                       decoration: BoxDecoration(
-                                        color: SpideyColors.spideyGold.withValues(alpha: 0.12),
+                                        color: isDark ? const Color(0xFF222222) : const Color(0xFFEEEEEE),
                                         borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(color: SpideyColors.spideyGold.withValues(alpha: 0.4)),
+                                        border: Border.all(color: isDark ? const Color(0xFF444444) : const Color(0xFFCCCCCC)),
                                       ),
-                                      child: const Text(
+                                      child: Text(
                                         'FAILED',
                                         style: TextStyle(
                                           fontSize: 9.5,
                                           fontWeight: FontWeight.bold,
-                                          color: SpideyColors.spideyGold,
+                                          color: textDim,
                                         ),
                                       ),
                                     )
@@ -2266,7 +2777,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF161B22) : Colors.white,
+                  color: isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: borderColor, width: 1),
                   boxShadow: [
@@ -2290,10 +2801,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               : null,
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-                            backgroundColor: SpideyColors.spideyRed,
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor: isDark ? const Color(0xFF261014) : const Color(0xFFFFECEE),
-                            disabledForegroundColor: SpideyColors.spideyRed.withValues(alpha: 0.5),
+                            backgroundColor: isDark ? Colors.white : Colors.black,
+                            foregroundColor: isDark ? Colors.black : Colors.white,
+                            disabledBackgroundColor: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFE5E5E5),
+                            disabledForegroundColor: isDark ? const Color(0xFF555555) : const Color(0xFF999999),
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
@@ -2306,8 +2817,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 isBatchRunning ? Icons.sync : Icons.arrow_downward,
                                 size: 16,
                                 color: (playlist.hasSelection && !isBatchRunning)
-                                    ? Colors.white
-                                    : SpideyColors.spideyRed.withValues(alpha: 0.7),
+                                    ? (isDark ? Colors.black : Colors.white)
+                                    : (isDark ? const Color(0xFF555555) : const Color(0xFF999999)),
                               ),
                               const SizedBox(width: 8),
                               Text(
@@ -2329,8 +2840,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             onPressed: dlCtrl.cancelBatch,
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                              foregroundColor: SpideyColors.spideyRed,
-                              side: BorderSide(color: SpideyColors.spideyRed.withValues(alpha: 0.5), width: 1),
+                              foregroundColor: textHi,
+                              side: BorderSide(color: isDark ? const Color(0xFF555555) : const Color(0xFF999999), width: 1),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
                               ),
@@ -2367,7 +2878,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF1E2633) : const Color(0xFFF1F5F9),
+                          color: isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: borderLit),
                         ),
@@ -2396,8 +2907,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
                                     color: isBatchRunning
-                                        ? SpideyColors.spideyRed
-                                        : (playlist.hasSelection ? SpideyColors.spideyBlue : textNorm),
+                                        ? textHi
+                                        : (playlist.hasSelection ? textHi : textNorm),
                                   ),
                                 ),
                               ],
@@ -2439,17 +2950,17 @@ class _HomeScreenState extends State<HomeScreen> {
                               onTap: dlCtrl.openFolder,
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
-                                children: const [
+                                children: [
                                   Text(
                                     'DESTINATION ↴',
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.bold,
-                                      color: SpideyColors.spideyRed,
+                                      color: textHi,
                                     ),
                                   ),
-                                  SizedBox(width: 4),
-                                  Icon(Icons.open_in_new, size: 12, color: SpideyColors.spideyRed),
+                                  const SizedBox(width: 4),
+                                  Icon(Icons.open_in_new, size: 12, color: textHi),
                                 ],
                               ),
                             ),
@@ -2476,11 +2987,12 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isDark,
     DownloadController dlCtrl,
   ) {
-    final bgRaised = isDark ? const Color(0xFF131D2A) : const Color(0xFFF0F6FF);
-    final bgWell = isDark ? const Color(0xFF161B22) : Colors.white;
+    final bgRaised = isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised;
+    final bgWell = isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel;
     final borderLit = isDark ? SpideyColors.darkBorderLit : SpideyColors.lightBorderLit;
     final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
     final textNorm = isDark ? SpideyColors.darkText : SpideyColors.lightText;
+    final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
 
     final isDownloading = dlCtrl.isDownloading;
     final audioConfig = dlCtrl.audioConfig;
@@ -2491,7 +3003,7 @@ class _HomeScreenState extends State<HomeScreen> {
         color: bgRaised,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: SpideyColors.spideyBlue.withValues(alpha: 0.35),
+          color: borderLit,
           width: 1,
         ),
       ),
@@ -2506,7 +3018,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.graphic_eq, size: 16, color: SpideyColors.spideyBlue),
+                    Icon(Icons.graphic_eq, size: 16, color: textHi),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
@@ -2516,7 +3028,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 0.5,
-                          color: isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi,
+                          color: textHi,
                         ),
                       ),
                     ),
@@ -2533,10 +3045,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 child: Text(
                   '${audioConfig.format.id.toUpperCase()} · ${audioConfig.bitrate.id.toUpperCase()}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: SpideyColors.spideyBlue,
+                    color: textHi,
                   ),
                 ),
               ),
@@ -2565,35 +3077,47 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 5),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 1),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: audioConfig.format.isLossless ? 7 : 1,
+                    ),
                     decoration: BoxDecoration(
                       color: bgWell,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: borderLit),
                     ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<AudioBitrate>(
-                        value: audioConfig.bitrate,
-                        dropdownColor: bgWell,
-                        isDense: true,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w500,
-                          color: isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi,
-                        ),
-                        items: AudioBitrate.values.map((b) {
-                          return DropdownMenuItem(
-                            value: b,
-                            child: Text(b.label),
-                          );
-                        }).toList(),
-                        onChanged: isDownloading
-                            ? null
-                            : (val) {
-                                if (val != null) dlCtrl.setAudioBitrate(val);
-                              },
-                      ),
-                    ),
+                    child: audioConfig.format.isLossless
+                        ? Text(
+                            'LOSSLESS (Master)',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi,
+                            ),
+                          )
+                        : DropdownButtonHideUnderline(
+                            child: DropdownButton<AudioBitrate>(
+                              value: audioConfig.bitrate,
+                              dropdownColor: bgWell,
+                              isDense: true,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w500,
+                                color: isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi,
+                              ),
+                              items: AudioBitrate.values.map((b) {
+                                return DropdownMenuItem(
+                                  value: b,
+                                  child: Text(b.label),
+                                );
+                              }).toList(),
+                              onChanged: isDownloading
+                                  ? null
+                                  : (val) {
+                                      if (val != null) dlCtrl.setAudioBitrate(val);
+                                    },
+                            ),
+                          ),
                   ),
                 ],
               ),
@@ -2659,8 +3183,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       height: 22,
                       child: Checkbox(
                         value: audioConfig.embedThumbnail,
-                        activeColor: SpideyColors.spideyBlue,
-                        checkColor: Colors.white,
+                        activeColor: isDark ? Colors.white : Colors.black,
+                        checkColor: isDark ? Colors.black : Colors.white,
                         onChanged: isDownloading
                             ? null
                             : (val) => dlCtrl.setEmbedThumbnail(val ?? true),
@@ -2692,8 +3216,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       height: 22,
                       child: Checkbox(
                         value: audioConfig.embedMetadata,
-                        activeColor: SpideyColors.spideyBlue,
-                        checkColor: Colors.white,
+                        activeColor: isDark ? Colors.white : Colors.black,
+                        checkColor: isDark ? Colors.black : Colors.white,
                         onChanged: isDownloading
                             ? null
                             : (val) => dlCtrl.setEmbedMetadata(val ?? true),
@@ -2731,6 +3255,30 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               _buildAudioPresetChip(
+                label: 'LOSSLESS FLAC',
+                isActive: audioConfig == AudioConfig.losslessFlac,
+                isDark: isDark,
+                onTap: isDownloading
+                    ? null
+                    : () => dlCtrl.applyAudioPreset(AudioConfig.losslessFlac),
+              ),
+              _buildAudioPresetChip(
+                label: 'STUDIO WAV',
+                isActive: audioConfig == AudioConfig.studioWav,
+                isDark: isDark,
+                onTap: isDownloading
+                    ? null
+                    : () => dlCtrl.applyAudioPreset(AudioConfig.studioWav),
+              ),
+              _buildAudioPresetChip(
+                label: 'OPUS HI-FI',
+                isActive: audioConfig == AudioConfig.opusStream,
+                isDark: isDark,
+                onTap: isDownloading
+                    ? null
+                    : () => dlCtrl.applyAudioPreset(AudioConfig.opusStream),
+              ),
+              _buildAudioPresetChip(
                 label: 'STUDIO (320k)',
                 isActive: audioConfig == AudioConfig.studioMusic,
                 isDark: isDark,
@@ -2757,6 +3305,351 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildClipTrimmerDeck(
+    BuildContext context,
+    bool isDark,
+    VideoInfo video,
+    DownloadController dlCtrl,
+  ) {
+    final bgRaised = isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised;
+    final bgWell = isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel;
+    final borderLit = isDark ? SpideyColors.darkBorderLit : SpideyColors.lightBorderLit;
+    final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
+    final textNorm = isDark ? SpideyColors.darkText : SpideyColors.lightText;
+    final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
+
+    final clip = dlCtrl.clip;
+    final isDownloading = dlCtrl.isDownloading;
+    final totalDuration = video.duration ?? const Duration(minutes: 10);
+    final totalSeconds = totalDuration.inSeconds > 0 ? totalDuration.inSeconds.toDouble() : 600.0;
+
+    final startSeconds = clip.start.inSeconds.toDouble().clamp(0.0, totalSeconds);
+    final endSeconds = (clip.end?.inSeconds.toDouble() ?? totalSeconds).clamp(startSeconds, totalSeconds);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: bgRaised,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: clip.isEnabled
+              ? (isDark ? Colors.white : Colors.black)
+              : borderLit,
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Row: Icon + Title + Switch / Active badge
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.content_cut,
+                      size: 16,
+                      color: clip.isEnabled ? textHi : textDim,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'VIDEO TRIMMER & CLIP SLICER · TIME RANGE',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                          color: clip.isEnabled ? textHi : textDim,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Enable / Disable Chip
+              InkWell(
+                key: const ValueKey('clip_toggle_button'),
+                onTap: isDownloading ? null : () => dlCtrl.toggleClip(!clip.isEnabled),
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: clip.isEnabled
+                        ? (isDark ? Colors.white : Colors.black)
+                        : bgWell,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: clip.isEnabled
+                          ? (isDark ? Colors.white : Colors.black)
+                          : borderLit,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        clip.isEnabled ? Icons.check : Icons.crop,
+                        size: 12,
+                        color: clip.isEnabled
+                            ? (isDark ? Colors.black : Colors.white)
+                            : textDim,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        clip.isEnabled ? 'CLIP ACTIVE' : 'FULL VIDEO',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: clip.isEnabled
+                              ? (isDark ? Colors.black : Colors.white)
+                              : textDim,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          // Body
+          AnimatedSize(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOutCubic,
+            child: clip.isEnabled
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 14),
+
+                      // Time Range Slider (Dual Thumbs)
+                      Row(
+                        children: [
+                          Text(
+                            TimeRangeClip.formatTimestamp(clip.start),
+                            style: TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: textHi,
+                            ),
+                          ),
+                          Expanded(
+                            child: SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                activeTrackColor: isDark ? Colors.white : Colors.black,
+                                inactiveTrackColor: isDark ? const Color(0xFF333333) : const Color(0xFFCCCCCC),
+                                thumbColor: isDark ? Colors.white : Colors.black,
+                                overlayColor: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.1),
+                                trackHeight: 3,
+                                rangeThumbShape: const RoundRangeSliderThumbShape(
+                                  enabledThumbRadius: 6,
+                                ),
+                              ),
+                              child: RangeSlider(
+                                key: const ValueKey('clip_range_slider'),
+                                values: RangeValues(startSeconds, endSeconds),
+                                min: 0.0,
+                                max: totalSeconds,
+                                onChanged: isDownloading
+                                    ? null
+                                    : (RangeValues newValues) {
+                                        dlCtrl.setClipRange(
+                                          Duration(seconds: newValues.start.round()),
+                                          Duration(seconds: newValues.end.round()),
+                                        );
+                                      },
+                              ),
+                            ),
+                          ),
+                          Text(
+                            TimeRangeClip.formatTimestamp(clip.end ?? totalDuration),
+                            style: TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: textHi,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Timecode Displays & Presets Row
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          // START Box
+                          _buildTimecodeBox(
+                            label: 'START',
+                            value: TimeRangeClip.formatTimestamp(clip.start),
+                            isDark: isDark,
+                            borderLit: borderLit,
+                            bgWell: bgWell,
+                            textDim: textDim,
+                            textHi: textHi,
+                          ),
+                          Icon(Icons.arrow_forward, size: 14, color: textDim),
+                          // END Box
+                          _buildTimecodeBox(
+                            label: 'END',
+                            value: TimeRangeClip.formatTimestamp(clip.end ?? totalDuration),
+                            isDark: isDark,
+                            borderLit: borderLit,
+                            bgWell: bgWell,
+                            textDim: textDim,
+                            textHi: textHi,
+                          ),
+                          // CLIP LENGTH badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: bgWell,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: borderLit),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.timelapse, size: 12, color: textNorm),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'CLIP: ${TimeRangeClip.formatTimestamp((clip.end ?? totalDuration) - clip.start)}',
+                                  style: TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: textHi,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Quick Presets
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              _buildClipPresetChip(
+                                label: 'FIRST 30s',
+                                key: const ValueKey('clip_preset_30s'),
+                                isDark: isDark,
+                                onTap: isDownloading ? null : () => dlCtrl.applyClipPreset(const Duration(seconds: 30)),
+                              ),
+                              _buildClipPresetChip(
+                                label: 'FIRST 60s',
+                                key: const ValueKey('clip_preset_60s'),
+                                isDark: isDark,
+                                onTap: isDownloading ? null : () => dlCtrl.applyClipPreset(const Duration(seconds: 60)),
+                              ),
+                              if (totalDuration >= const Duration(minutes: 5))
+                                _buildClipPresetChip(
+                                  label: 'FIRST 5m',
+                                  key: const ValueKey('clip_preset_5m'),
+                                  isDark: isDark,
+                                  onTap: isDownloading ? null : () => dlCtrl.applyClipPreset(const Duration(minutes: 5)),
+                                ),
+                              _buildClipPresetChip(
+                                label: 'FULL DURATION',
+                                key: const ValueKey('clip_preset_reset'),
+                                isDark: isDark,
+                                onTap: isDownloading ? null : () => dlCtrl.resetClip(video.duration),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimecodeBox({
+    required String label,
+    required String value,
+    required bool isDark,
+    required Color borderLit,
+    required Color bgWell,
+    required Color textDim,
+    required Color textHi,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgWell,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: borderLit),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$label: ',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+              color: textDim,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: textHi,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClipPresetChip({
+    required String label,
+    required Key key,
+    required bool isDark,
+    required VoidCallback? onTap,
+  }) {
+    final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
+    final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
+
+    return InkWell(
+      key: key,
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF222222) : const Color(0xFFEAEAEA),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: isDark ? const Color(0xFF444444) : const Color(0xFFCCCCCC)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: onTap != null ? textHi : textDim,
+          ),
+        ),
       ),
     );
   }
@@ -2794,13 +3687,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontSize: 12,
                     fontWeight:
                         isSelected ? FontWeight.bold : FontWeight.normal,
-                    color: isSelected ? SpideyColors.spideyRed : textHi,
+                    color: textHi,
                   ),
                 ),
               ),
               if (isSelected)
-                const Icon(Icons.check,
-                    size: 14, color: SpideyColors.spideyRed),
+                Icon(Icons.check, size: 14, color: textHi),
             ],
           ),
         );
@@ -2821,9 +3713,7 @@ class _HomeScreenState extends State<HomeScreen> {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.bold,
-              color: dlCtrl.speedLimit.isThrottled
-                  ? SpideyColors.spideyRed
-                  : textHi,
+              color: textHi,
             ),
           ),
         ],
@@ -2864,13 +3754,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontSize: 12,
                     fontWeight:
                         isSelected ? FontWeight.bold : FontWeight.normal,
-                    color: isSelected ? SpideyColors.spideyBlue : textHi,
+                    color: textHi,
                   ),
                 ),
               ),
               if (isSelected)
-                const Icon(Icons.check,
-                    size: 14, color: SpideyColors.spideyBlue),
+                Icon(Icons.check, size: 14, color: textHi),
             ],
           ),
         );
@@ -2891,9 +3780,7 @@ class _HomeScreenState extends State<HomeScreen> {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.bold,
-              color: dlCtrl.scheduleDelay.isDelayed
-                  ? SpideyColors.spideyBlue
-                  : textHi,
+              color: textHi,
             ),
           ),
         ],
@@ -2907,18 +3794,21 @@ class _HomeScreenState extends State<HomeScreen> {
     required bool isDark,
     required VoidCallback? onTap,
   }) {
+    final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
+    final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
+
     return InkWell(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: isActive
-              ? (isDark ? const Color(0xFF14243B) : const Color(0xFFE0EDFF))
+              ? (isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE0E0E0))
               : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
             color: isActive
-                ? SpideyColors.spideyBlue
+                ? (isDark ? Colors.white : Colors.black)
                 : (isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder),
           ),
         ),
@@ -2927,12 +3817,327 @@ class _HomeScreenState extends State<HomeScreen> {
           style: TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.bold,
-            color: isActive
-                ? SpideyColors.spideyBlue
-                : (isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim),
+            color: isActive ? textHi : textDim,
           ),
         ),
       ),
     );
   }
+
+  String _getFolderDisplayName(String path) {
+    if (path.isEmpty) return 'Downloads';
+    final normalized = path.replaceAll('\\', '/');
+    final segments = normalized.split('/').where((s) => s.isNotEmpty).toList();
+    if (segments.isEmpty) return 'Downloads';
+    return segments.last;
+  }
+
+  Widget _buildFaceplateFolderPill(
+    BuildContext context,
+    bool isDark,
+    DownloadController dlCtrl,
+  ) {
+    final borderColor = isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder;
+    final bgWell = isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel;
+    final bgRaised = isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised;
+    final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
+    final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
+
+    final folderName = _getFolderDisplayName(dlCtrl.downloadDirectory);
+
+    return PopupMenuButton<String>(
+      key: const ValueKey('faceplate_folder_button'),
+      tooltip: dlCtrl.downloadDirectory.isNotEmpty
+          ? 'Destination: ${dlCtrl.downloadDirectory}'
+          : 'Choose Download Folder',
+      onSelected: (value) async {
+        if (value == '__browse__') {
+          await dlCtrl.pickDirectory();
+        } else if (value == '__custom__') {
+          _showCustomPathDialog(context, dlCtrl, isDark);
+        } else if (value == '__open__') {
+          await dlCtrl.openFolder();
+        } else if (value.startsWith('preset:')) {
+          final targetPath = value.substring('preset:'.length);
+          dlCtrl.setDownloadDirectory(targetPath);
+        }
+      },
+      color: bgRaised,
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      itemBuilder: (context) {
+        final items = <PopupMenuEntry<String>>[
+          PopupMenuItem<String>(
+            value: '__browse__',
+            child: Row(
+              children: [
+                Icon(Icons.folder_open, size: 16, color: textHi),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Browse Folder...',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: textHi,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          PopupMenuItem<String>(
+            value: '__custom__',
+            child: Row(
+              children: [
+                Icon(Icons.edit_outlined, size: 16, color: textHi),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Enter Custom Path...',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: textHi,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (dlCtrl.downloadDirectory.isNotEmpty)
+            PopupMenuItem<String>(
+              value: '__open__',
+              child: Row(
+                children: [
+                  Icon(Icons.open_in_new, size: 16, color: textDim),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Open in File Manager',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: textHi,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ];
+
+        // Add Quick presets if available
+        if (_quickDirs.isNotEmpty) {
+          items.add(const PopupMenuDivider());
+          for (final entry in _quickDirs.entries) {
+            final isCurrent = dlCtrl.downloadDirectory == entry.value;
+            items.add(
+              PopupMenuItem<String>(
+                value: 'preset:${entry.value}',
+                child: Row(
+                  children: [
+                    Icon(
+                      entry.key == 'Videos'
+                          ? Icons.video_library
+                          : entry.key == 'Desktop'
+                              ? Icons.desktop_windows
+                              : Icons.download_done,
+                      size: 15,
+                      color: isCurrent ? textHi : textDim,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        entry.key,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                          color: isCurrent ? textHi : textHi,
+                        ),
+                      ),
+                    ),
+                    if (isCurrent)
+                      Icon(Icons.check, size: 14, color: textHi),
+                  ],
+                ),
+              ),
+            );
+          }
+        }
+
+        return items;
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+        margin: const EdgeInsets.only(right: 8),
+        decoration: BoxDecoration(
+          color: bgWell,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: borderColor, width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.folder_outlined, size: 13, color: textDim),
+            const SizedBox(width: 5),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 110),
+              child: Text(
+                folderName,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? SpideyColors.darkText : SpideyColors.lightText,
+                ),
+              ),
+            ),
+            const SizedBox(width: 3),
+            Icon(Icons.arrow_drop_down, size: 14, color: textDim),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCustomPathDialog(
+    BuildContext context,
+    DownloadController dlCtrl,
+    bool isDark,
+  ) {
+    final pathController = TextEditingController(text: dlCtrl.downloadDirectory);
+    final bgWell = isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel;
+    final bgRaised = isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised;
+    final borderLit = isDark ? SpideyColors.darkBorderLit : SpideyColors.lightBorderLit;
+    final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
+    final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          backgroundColor: bgWell,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: borderLit),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.folder_special, color: textHi, size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Set Download Path',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Enter or paste the absolute path to your desired downloads folder:',
+                  style: TextStyle(fontSize: 12, color: textDim),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const ValueKey('custom_path_input'),
+                  controller: pathController,
+                  autofocus: true,
+                  style: TextStyle(fontSize: 13, color: textHi),
+                  decoration: InputDecoration(
+                    hintText: '/home/user/Downloads or C:\\Users\\Downloads',
+                    hintStyle: TextStyle(fontSize: 12, color: textDim),
+                    filled: true,
+                    fillColor: bgRaised,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: borderLit),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: borderLit),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: isDark ? Colors.white : Colors.black),
+                    ),
+                  ),
+                ),
+                if (_quickDirs.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    'QUICK PRESETS:',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                      color: textDim,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: _quickDirs.entries.map((entry) {
+                      return InkWell(
+                        onTap: () {
+                          pathController.text = entry.value;
+                        },
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: bgRaised,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: borderLit),
+                          ),
+                          child: Text(
+                            entry.key,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: textHi,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: Text('CANCEL', style: TextStyle(color: textDim)),
+            ),
+            ElevatedButton(
+              key: const ValueKey('custom_path_apply_button'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDark ? Colors.white : Colors.black,
+                foregroundColor: isDark ? Colors.black : Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () {
+                final text = pathController.text.trim();
+                if (text.isNotEmpty) {
+                  dlCtrl.setDownloadDirectory(text);
+                }
+                Navigator.of(dialogCtx).pop();
+              },
+              child: const Text('APPLY', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
+
