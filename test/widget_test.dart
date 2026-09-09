@@ -4,8 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:video_downloader/controllers/download_controller.dart';
 import 'package:video_downloader/controllers/video_controller.dart';
 import 'package:video_downloader/main.dart';
+import 'package:video_downloader/models/audio_config.dart';
 import 'package:video_downloader/models/download_task.dart';
 import 'package:video_downloader/models/quality_option.dart';
+import 'package:video_downloader/models/speed_limit.dart';
 import 'package:video_downloader/models/video_format.dart';
 import 'package:video_downloader/models/video_info.dart';
 import 'package:video_downloader/services/download_service.dart';
@@ -54,6 +56,8 @@ class MockDownloadService extends DownloadService {
     required String destinationDirectory,
     required DownloadProgressCallback onProgress,
     DownloadLogCallback? onLog,
+    AudioConfig? audioConfig,
+    SpeedLimit? speedLimit,
   }) async {
     _isDownloading = true;
     onLog?.call('[download] Destination: /tmp/sample.mp4');
