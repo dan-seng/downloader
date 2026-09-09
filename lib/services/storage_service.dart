@@ -86,4 +86,43 @@ class StorageService {
       await io.Process.run('open', ['-R', filePath]);
     }
   }
+
+  /// Checks if a directory path exists on disk.
+  Future<bool> directoryExists(String path) async {
+    if (path.trim().isEmpty) return false;
+    return io.Directory(path.trim()).exists();
+  }
+
+  /// Gets quick preset directories based on OS environment (e.g. Downloads, Videos, Desktop).
+  Future<Map<String, String>> getQuickDirectories() async {
+    final dirs = <String, String>{};
+    try {
+      final defaultDownloads = await getDefaultDownloadsDirectory();
+      if (defaultDownloads.isNotEmpty) {
+        dirs['Downloads'] = defaultDownloads;
+      }
+
+      final home = io.Platform.environment['HOME'] ?? io.Platform.environment['USERPROFILE'] ?? '';
+      if (home.isNotEmpty) {
+        final videos = io.Directory(io.Platform.isWindows ? '$home\\Videos' : '$home/Videos');
+        if (await videos.exists()) {
+          dirs['Videos'] = videos.path;
+        }
+
+        final desktop = io.Directory(io.Platform.isWindows ? '$home\\Desktop' : '$home/Desktop');
+        if (await desktop.exists()) {
+          dirs['Desktop'] = desktop.path;
+        }
+
+        final homeDir = io.Directory(home);
+        if (await homeDir.exists()) {
+          dirs['Home'] = homeDir.path;
+        }
+      }
+    } catch (_) {
+      // Ignore directory check errors
+    }
+
+    return dirs;
+  }
 }

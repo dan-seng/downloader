@@ -6,6 +6,7 @@ import 'package:video_downloader/models/audio_config.dart';
 import 'package:video_downloader/models/download_task.dart';
 import 'package:video_downloader/models/quality_option.dart';
 import 'package:video_downloader/models/speed_limit.dart';
+import 'package:video_downloader/models/time_range_clip.dart';
 import 'package:video_downloader/models/video_info.dart';
 import 'package:video_downloader/services/download_service.dart';
 import 'package:video_downloader/services/process_service.dart';
@@ -403,6 +404,88 @@ void main() {
 
       final args = fakeService.lastArguments!;
       expect(args.contains('--limit-rate'), isFalse);
+    });
+
+    test('appends --download-sections and --force-keyframes-at-cuts when clip is enabled', () async {
+      final fakeProcess = FakeStreamProcess();
+      fakeService.process = fakeProcess;
+
+      const video = VideoInfo(
+        id: 'test-trim',
+        title: 'Trimmed Video',
+        formats: [],
+      );
+
+      const quality = QualityOption(
+        id: '1080p',
+        label: '1080p',
+        extension: 'mp4',
+        formatSpecifier: 'bv+ba',
+      );
+
+      const clip = TimeRangeClip(
+        isEnabled: true,
+        start: Duration(minutes: 1, seconds: 30),
+        end: Duration(minutes: 4, seconds: 15),
+      );
+
+      final downloadFuture = downloadService.startDownload(
+        video: video,
+        quality: quality,
+        destinationDirectory: '/downloads',
+        onProgress: (_) {},
+        clip: clip,
+      );
+
+      await Future.delayed(const Duration(milliseconds: 10));
+      fakeProcess.completeProcess(0);
+      await downloadFuture;
+
+      final args = fakeService.lastArguments!;
+      expect(args.contains('--download-sections'), isTrue);
+      final sectionIdx = args.indexOf('--download-sections');
+      expect(args[sectionIdx + 1], '*01:30-04:15');
+      expect(args.contains('--force-keyframes-at-cuts'), isTrue);
+    });
+
+    test('omits --download-sections when clip is disabled', () async {
+      final fakeProcess = FakeStreamProcess();
+      fakeService.process = fakeProcess;
+
+      const video = VideoInfo(
+        id: 'test-notrim',
+        title: 'Full Video',
+        formats: [],
+      );
+
+      const quality = QualityOption(
+        id: '1080p',
+        label: '1080p',
+        extension: 'mp4',
+        formatSpecifier: 'bv+ba',
+      );
+
+      const clip = TimeRangeClip(
+        isEnabled: false,
+        start: Duration(seconds: 30),
+        end: Duration(seconds: 90),
+      );
+
+      final downloadFuture = downloadService.startDownload(
+        video: video,
+        quality: quality,
+        destinationDirectory: '/downloads',
+        onProgress: (_) {},
+        clip: clip,
+      );
+
+      await Future.delayed(const Duration(milliseconds: 10));
+      fakeProcess.completeProcess(0);
+      await downloadFuture;
+
+      final args = fakeService.lastArguments!;
+      expect(args.contains('--download-sections'), isFalse);
+      expect(args.contains('--force-keyframes-at-cuts'), isFalse);
     });
   });
 }

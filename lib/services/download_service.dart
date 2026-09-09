@@ -6,6 +6,7 @@ import '../models/audio_config.dart';
 import '../models/download_task.dart';
 import '../models/quality_option.dart';
 import '../models/speed_limit.dart';
+import '../models/time_range_clip.dart';
 import '../models/video_info.dart';
 import 'process_service.dart';
 
@@ -49,6 +50,7 @@ class DownloadService {
     DownloadLogCallback? onLog,
     AudioConfig? audioConfig,
     SpeedLimit? speedLimit,
+    TimeRangeClip? clip,
   }) async {
     if (isDownloading) {
       throw const ProcessExecutionException('A download is already in progress.');
@@ -58,7 +60,9 @@ class DownloadService {
 
     final task = DownloadTask(
       id: video.id,
-      url: video.webpageUrl ?? 'https://www.youtube.com/watch?v=${video.id}',
+      url: (video.webpageUrl != null && video.webpageUrl!.isNotEmpty)
+          ? video.webpageUrl!
+          : video.id,
       title: video.title,
       destinationPath: destinationDirectory,
       formatId: quality.id,
@@ -82,6 +86,11 @@ class DownloadService {
       if (speedLimit != null && speedLimit.rateFlag != null) ...[
         '--limit-rate',
         speedLimit.rateFlag!,
+      ],
+      if (clip != null && clip.isEnabled) ...[
+        '--download-sections',
+        clip.toSectionArgument(),
+        '--force-keyframes-at-cuts',
       ],
       if (quality.isAudioOnly) ...[
         '-x',
@@ -109,6 +118,10 @@ class DownloadService {
     ];
 
     final stderrBuffer = StringBuffer();
+
+    if (clip != null && clip.isEnabled) {
+      onLog?.call('spidey-trim: slicing section ${clip.toSectionArgument()} with keyframe precision');
+    }
 
     try {
       final process = await _processService.start(
