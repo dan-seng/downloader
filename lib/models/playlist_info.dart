@@ -24,9 +24,7 @@ class PlaylistItem {
   factory PlaylistItem.fromJson(Map<String, dynamic> json, {int index = 0}) {
     final id = json['id']?.toString() ?? 'item_$index';
     final rawUrl = json['url']?.toString() ?? json['webpage_url']?.toString();
-    final url = (rawUrl != null && rawUrl.startsWith('http'))
-        ? rawUrl
-        : 'https://www.youtube.com/watch?v=$id';
+    final url = (rawUrl != null && rawUrl.isNotEmpty) ? rawUrl : id;
 
     Duration? duration;
     final rawDuration = json['duration'];

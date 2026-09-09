@@ -88,60 +88,41 @@ class QualityOption {
       ),
     );
 
-    // Standard preset resolutions
-    const standardPresets = [
-      {'height': 2160, 'name': '4K (2160p)'},
-      {'height': 1440, 'name': '2K (1440p)'},
-      {'height': 1080, 'name': 'Full HD (1080p)'},
-      {'height': 720, 'name': 'HD (720p)'},
-      {'height': 480, 'name': 'SD (480p)'},
-      {'height': 360, 'name': '360p'},
-    ];
-
-    for (final preset in standardPresets) {
-      final targetHeight = preset['height'] as int;
-      final name = preset['name'] as String;
-
-      // Check if video actually has streams matching this resolution or dimensions
-      final hasFormat = videoInfo.formats.any((f) {
-        if (f.height == targetHeight) return true;
-        if (f.height != null && (f.height! - targetHeight).abs() <= 16) {
-          return true;
-        }
-        if (targetHeight == 2160 && (f.width == 3840 || f.height == 2160)) {
-          return true;
-        }
-        if (targetHeight == 1440 && (f.width == 2560 || f.height == 1440)) {
-          return true;
-        }
-        if (targetHeight == 1080 && (f.width == 1920 || f.height == 1080)) {
-          return true;
-        }
-        if (targetHeight == 720 && (f.width == 1280 || f.height == 720)) {
-          return true;
-        }
-        if (targetHeight == 480 && (f.width == 854 || f.height == 480)) {
-          return true;
-        }
-        if (targetHeight == 360 && (f.width == 640 || f.height == 360)) {
-          return true;
-        }
-        return false;
-      });
-
-      if (hasFormat) {
-        options.add(
-          QualityOption(
-            id: '${targetHeight}p',
-            label: '$name — MP4',
-            extension: 'mp4',
-            height: targetHeight,
-            formatSpecifier:
-                'bv*[height=$targetHeight]+ba/b[height=$targetHeight]/bv*[height<=$targetHeight]+ba/b[height<=$targetHeight]',
-            estimatedBytes: getEstimatedBytes(targetHeight),
-          ),
-        );
+    // Dynamically generate quality options for all stream resolutions present in the video
+    String getResolutionName(int height) {
+      switch (height) {
+        case 4320:
+          return '8K (4320p)';
+        case 2160:
+          return '4K (2160p)';
+        case 1440:
+          return '2K (1440p)';
+        case 1080:
+          return 'Full HD (1080p)';
+        case 720:
+          return 'HD (720p)';
+        case 480:
+          return 'SD (480p)';
+        case 360:
+          return '360p';
+        default:
+          return '${height}p';
       }
+    }
+
+    for (final targetHeight in sortedHeights) {
+      final name = getResolutionName(targetHeight);
+      options.add(
+        QualityOption(
+          id: '${targetHeight}p',
+          label: '$name — MP4',
+          extension: 'mp4',
+          height: targetHeight,
+          formatSpecifier:
+              'bv*[height=$targetHeight]+ba/b[height=$targetHeight]/bv*[height<=$targetHeight]+ba/b[height<=$targetHeight]',
+          estimatedBytes: getEstimatedBytes(targetHeight),
+        ),
+      );
     }
 
     // Audio-only option

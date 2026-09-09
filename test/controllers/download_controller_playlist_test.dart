@@ -5,7 +5,10 @@ import 'package:video_downloader/models/download_task.dart';
 import 'package:video_downloader/models/playlist_info.dart';
 import 'package:video_downloader/models/quality_option.dart';
 import 'package:video_downloader/models/speed_limit.dart';
+import 'package:video_downloader/models/time_range_clip.dart';
 import 'package:video_downloader/models/video_info.dart';
+import 'package:video_downloader/models/download_archive_item.dart';
+import 'package:video_downloader/services/archive_service.dart';
 import 'package:video_downloader/services/download_service.dart';
 import 'package:video_downloader/services/storage_service.dart';
 
@@ -22,6 +25,7 @@ class _MockDownloadService extends DownloadService {
     DownloadLogCallback? onLog,
     AudioConfig? audioConfig,
     SpeedLimit? speedLimit,
+    TimeRangeClip? clip,
   }) async {
     if (shouldFailSecond && video.id == 'item_2') {
       throw Exception('Network timeout on item 2');
@@ -47,10 +51,22 @@ class _MockStorageService extends StorageService {
   Future<String> getDefaultDownloadsDirectory() async => '/downloads/path';
 }
 
+class _MockArchiveService extends ArchiveService {
+  _MockArchiveService() : super(customStoragePath: '/tmp/test_playlist_archive.json');
+
+  @override
+  Future<List<DownloadArchiveItem>> loadArchive() async => [];
+
+  @override
+  Future<void> saveItem(DownloadArchiveItem item) async {}
+}
+
 void main() {
   group('DownloadController Batch & Playlist Queue', () {
     test('setPlaylist initializes batch quality profiles', () {
-      final controller = DownloadController();
+      final controller = DownloadController(
+        archiveService: _MockArchiveService(),
+      );
       final playlist = PlaylistInfo(
         id: 'p1',
         title: 'Cyberpunk Soundscapes',
@@ -72,6 +88,7 @@ void main() {
       final controller = DownloadController(
         downloadService: mockDl,
         storageService: mockStorage,
+        archiveService: _MockArchiveService(),
       );
 
       final playlist = PlaylistInfo(
@@ -103,6 +120,7 @@ void main() {
       final controller = DownloadController(
         downloadService: _MockDownloadService(),
         storageService: _MockStorageService(),
+        archiveService: _MockArchiveService(),
       );
 
       final playlist = PlaylistInfo(

@@ -1,19 +1,26 @@
 import 'dart:async';
+import 'dart:io' as io;
 import 'package:flutter/foundation.dart';
 import '../models/audio_config.dart';
+import '../models/download_archive_item.dart';
 import '../models/download_task.dart';
 import '../models/playlist_info.dart';
 import '../models/quality_option.dart';
 import '../models/speed_limit.dart';
+import '../models/time_range_clip.dart';
 import '../models/video_info.dart';
+import '../services/archive_service.dart';
 import '../services/download_service.dart';
+import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 
 /// Controller managing quality selection, destination directories,
-/// and live download tasks.
+/// live download tasks, desktop notifications, and persistent library archives.
 class DownloadController extends ChangeNotifier {
   final DownloadService _downloadService;
   final StorageService _storageService;
+  final NotificationService _notificationService;
+  final ArchiveService _archiveService;
 
   String _downloadDirectory = '';
   QualityOption? _selectedQuality;
@@ -24,15 +31,25 @@ class DownloadController extends ChangeNotifier {
   SpeedLimit _speedLimit = SpeedLimit.unlimited;
   ScheduleDelay _scheduleDelay = ScheduleDelay.none;
   Completer<void>? _scheduleCancelCompleter;
+  TimeRangeClip _clip = const TimeRangeClip();
 
+  List<DownloadArchiveItem> _archiveItems = [];
+  String _archiveSearchQuery = '';
+  ArchiveFilter _archiveFilter = ArchiveFilter.all;
+  ArchiveSort _archiveSort = ArchiveSort.newest;
+  bool _notificationsEnabled = true;
 
   DownloadController({
     DownloadService? downloadService,
     StorageService? storageService,
+    NotificationService? notificationService,
+    ArchiveService? archiveService,
   })  : _downloadService = downloadService ?? DownloadService(),
-        _storageService = storageService ?? const StorageService();
+        _storageService = storageService ?? const StorageService(),
+        _notificationService = notificationService ?? NotificationService(),
+        _archiveService = archiveService ?? ArchiveService();
 
-  final List<String> _consoleLogs = ['deck ready — waiting for a link'];
+  final List<String> _consoleLogs = [];
   final List<DownloadTask> _recentQueue = [];
   final List<DownloadTask> _batchQueue = [];
   bool _isBatchRunning = false;
@@ -46,6 +63,14 @@ class DownloadController extends ChangeNotifier {
   AudioConfig get audioConfig => _audioConfig;
   SpeedLimit get speedLimit => _speedLimit;
   ScheduleDelay get scheduleDelay => _scheduleDelay;
+  TimeRangeClip get clip => _clip;
+  bool get notificationsEnabled => _notificationsEnabled;
+  NotificationService get notificationService => _notificationService;
+  ArchiveService get archiveService => _archiveService;
+  List<DownloadArchiveItem> get archiveItems => List.unmodifiable(_archiveItems);
+  String get archiveSearchQuery => _archiveSearchQuery;
+  ArchiveFilter get archiveFilter => _archiveFilter;
+  ArchiveSort get archiveSort => _archiveSort;
   bool get isDownloading =>
       _isBatchRunning ||
       _downloadService.isDownloading ||
@@ -72,6 +97,51 @@ class DownloadController extends ChangeNotifier {
   void setScheduleDelay(ScheduleDelay delay) {
     _scheduleDelay = delay;
     addLog('off-peak schedule set: ${delay.label}');
+    notifyListeners();
+  }
+
+  /// Sets or updates the clip trimming range configuration.
+  void setClip(TimeRangeClip clip) {
+    _clip = clip;
+    if (clip.isEnabled) {
+      addLog('clip range set: ${clip.formatSummary()}');
+    } else {
+      addLog('clip trimming disabled — downloading full media');
+    }
+    notifyListeners();
+  }
+
+  /// Toggles clip trimming mode on/off.
+  void toggleClip(bool enabled) {
+    _clip = _clip.copyWith(isEnabled: enabled);
+    addLog(enabled ? 'clip mode enabled: ${_clip.formatSummary()}' : 'clip mode disabled');
+    notifyListeners();
+  }
+
+  /// Sets the start and end range for the clip.
+  void setClipRange(Duration start, Duration? end) {
+    _clip = _clip.copyWith(start: start, end: end);
+    notifyListeners();
+  }
+
+  /// Applies a quick preset length from start (e.g. 30s, 60s, 300s).
+  void applyClipPreset(Duration duration) {
+    _clip = _clip.copyWith(
+      isEnabled: true,
+      start: Duration.zero,
+      end: duration,
+    );
+    addLog('applied clip preset: ${_clip.formatSummary()}');
+    notifyListeners();
+  }
+
+  /// Resets clip trimming back to the beginning.
+  void resetClip([Duration? maxDuration]) {
+    _clip = TimeRangeClip(
+      isEnabled: false,
+      start: Duration.zero,
+      end: maxDuration,
+    );
     notifyListeners();
   }
 
@@ -134,12 +204,175 @@ class DownloadController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Initializes the default download directory from system paths.
+  /// Sets whether OS-level desktop notifications and sound effects are enabled.
+  void setNotificationsEnabled(bool enabled) {
+    _notificationsEnabled = enabled;
+    _notificationService.notificationsEnabled = enabled;
+    addLog('desktop notifications ${enabled ? "enabled" : "muted"}');
+    notifyListeners();
+  }
+
+  /// Loads persistent download archive from disk.
+  Future<void> loadArchive() async {
+    _archiveItems = await _archiveService.loadArchive();
+    notifyListeners();
+  }
+
+  /// Sets real-time query string to search archive items by title, filename, or URL.
+  void setArchiveSearchQuery(String query) {
+    _archiveSearchQuery = query;
+    notifyListeners();
+  }
+
+  /// Sets category filter for the archive library.
+  void setArchiveFilter(ArchiveFilter filter) {
+    _archiveFilter = filter;
+    notifyListeners();
+  }
+
+  /// Sets sorting order for the archive library.
+  void setArchiveSort(ArchiveSort sort) {
+    _archiveSort = sort;
+    notifyListeners();
+  }
+
+  /// Returns sorted and filtered archive items matching current query and filter tab.
+  List<DownloadArchiveItem> get filteredArchiveItems {
+    var items = List<DownloadArchiveItem>.from(_archiveItems);
+
+    switch (_archiveFilter) {
+      case ArchiveFilter.all:
+        break;
+      case ArchiveFilter.video:
+        items = items.where((it) => !it.isAudioOnly).toList();
+        break;
+      case ArchiveFilter.audio:
+        items = items.where((it) => it.isAudioOnly).toList();
+        break;
+      case ArchiveFilter.playlist:
+        items = items.where((it) => it.playlistTitle != null && it.playlistTitle!.isNotEmpty).toList();
+        break;
+    }
+
+    if (_archiveSearchQuery.trim().isNotEmpty) {
+      final q = _archiveSearchQuery.trim().toLowerCase();
+      items = items.where((it) {
+        return it.title.toLowerCase().contains(q) ||
+            it.url.toLowerCase().contains(q) ||
+            it.fileName.toLowerCase().contains(q);
+      }).toList();
+    }
+
+    switch (_archiveSort) {
+      case ArchiveSort.newest:
+        items.sort((a, b) => b.completedAt.compareTo(a.completedAt));
+        break;
+      case ArchiveSort.oldest:
+        items.sort((a, b) => a.completedAt.compareTo(b.completedAt));
+        break;
+      case ArchiveSort.largest:
+        items.sort((a, b) => b.fileSizeBytes.compareTo(a.fileSizeBytes));
+        break;
+      case ArchiveSort.titleAZ:
+        items.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+        break;
+    }
+
+    return items;
+  }
+
+  /// Deletes an archive record and optionally purges the physical file from disk.
+  Future<bool> deleteArchiveItem(String id, {bool deleteFileFromDisk = false}) async {
+    final success = await _archiveService.deleteItem(id, deleteFileFromDisk: deleteFileFromDisk);
+    if (success) {
+      addLog(deleteFileFromDisk
+          ? 'deleted archive record and purged file from disk'
+          : 'removed item from archive library');
+      await loadArchive();
+    }
+    return success;
+  }
+
+  /// Prunes archive entries whose files no longer exist on disk.
+  Future<int> clearMissingArchive() async {
+    final count = await _archiveService.clearMissing();
+    if (count > 0) {
+      addLog('cleared $count missing items from archive');
+      await loadArchive();
+    }
+    return count;
+  }
+
+  /// Opens an archived file in the default system viewer.
+  Future<void> openArchiveFile(String filePath) async {
+    await _storageService.openFile(filePath);
+  }
+
+  /// Opens the directory containing an archived file in the system file manager.
+  Future<void> openArchiveFolder(String filePath) async {
+    if (filePath.isEmpty) {
+      await _storageService.openDirectory(_downloadDirectory);
+      return;
+    }
+    final parent = io.File(filePath).parent.path;
+    await _storageService.openDirectory(parent);
+  }
+
+  /// Records completed download into persistent archive and triggers OS notification.
+  Future<void> _recordArchiveAndNotify({
+    required DownloadTask task,
+    required String url,
+    required String qualityLabel,
+    required bool isAudioOnly,
+    String? qualityId,
+    String? playlistTitle,
+    bool notify = true,
+  }) async {
+    final path = task.destinationPath ?? '';
+    var size = 0;
+    if (path.isNotEmpty) {
+      try {
+        final file = io.File(path);
+        if (file.existsSync()) {
+          size = file.lengthSync();
+        }
+      } catch (_) {}
+    }
+
+    final archiveItem = DownloadArchiveItem(
+      id: '${task.id}_${DateTime.now().millisecondsSinceEpoch}',
+      title: task.title,
+      url: url,
+      filePath: path,
+      formatLabel: qualityLabel,
+      fileSizeBytes: size,
+      completedAt: DateTime.now(),
+      isAudioOnly: isAudioOnly,
+      playlistTitle: playlistTitle,
+      qualityId: qualityId,
+      fileExists: path.isNotEmpty && io.File(path).existsSync(),
+    );
+
+    await _archiveService.saveItem(archiveItem);
+    await loadArchive();
+
+    if (notify) {
+      unawaited(_notificationService.sendDownloadCompleteNotification(
+        title: task.title,
+        filePath: path,
+        onOpenFile: () => _storageService.openFile(path),
+        onOpenFolder: () => _storageService.openDirectory(_downloadDirectory),
+      ));
+    }
+  }
+
+  /// Initializes the default download directory from system paths and loads archive.
   Future<void> initialize() async {
     if (_downloadDirectory.isEmpty) {
       _downloadDirectory = await _storageService.getDefaultDownloadsDirectory();
-      notifyListeners();
     }
+    await loadArchive();
+    notifyListeners();
   }
 
   /// Sets the currently analyzed video and derives available quality options.
@@ -147,8 +380,14 @@ class DownloadController extends ChangeNotifier {
     if (video == null) {
       _availableQualities = [];
       _selectedQuality = null;
+      _clip = const TimeRangeClip();
     } else {
       _availableQualities = QualityOption.fromVideoInfo(video);
+      _clip = TimeRangeClip(
+        isEnabled: false,
+        start: Duration.zero,
+        end: video.duration,
+      );
 
       // Find the highest resolution specific video option
       QualityOption? bestOption;
@@ -185,8 +424,27 @@ class DownloadController extends ChangeNotifier {
     );
     if (picked != null && picked.isNotEmpty) {
       _downloadDirectory = picked;
+      addLog('destination folder set: $picked');
       notifyListeners();
     }
+  }
+
+  /// Sets the download destination directory directly.
+  void setDownloadDirectory(String path) {
+    final trimmed = path.trim();
+    if (trimmed.isNotEmpty) {
+      _downloadDirectory = trimmed;
+      addLog('destination folder set: $trimmed');
+      notifyListeners();
+    }
+  }
+
+  /// Opens the current destination directory in the native file manager.
+  Future<void> openDownloadDirectory() async => openFolder();
+
+  /// Returns common system directory presets (Downloads, Videos, Desktop, Home).
+  Future<Map<String, String>> getQuickDirectories() async {
+    return _storageService.getQuickDirectories();
   }
 
   /// Starts downloading the analyzed video.
@@ -207,7 +465,9 @@ class DownloadController extends ChangeNotifier {
     if (_scheduleDelay.isDelayed) {
       final queuedTask = DownloadTask(
         id: video.id,
-        url: video.webpageUrl ?? 'https://www.youtube.com/watch?v=${video.id}',
+        url: (video.webpageUrl != null && video.webpageUrl!.isNotEmpty)
+            ? video.webpageUrl!
+            : video.id,
         title: video.title,
         destinationPath: _downloadDirectory,
         formatId: _selectedQuality!.id,
@@ -240,6 +500,7 @@ class DownloadController extends ChangeNotifier {
         destinationDirectory: _downloadDirectory,
         audioConfig: _audioConfig,
         speedLimit: _speedLimit,
+        clip: _clip.isEnabled ? _clip : null,
         onProgress: (task) {
           _currentTask = task;
           if (task.status == DownloadStatus.completed) {
@@ -247,6 +508,13 @@ class DownloadController extends ChangeNotifier {
               _recentQueue.insert(0, task);
             }
             addLog('download complete — saved to ${task.destinationPath}');
+            _recordArchiveAndNotify(
+              task: task,
+              url: video.webpageUrl ?? '',
+              qualityLabel: _selectedQuality?.label ?? 'Universal',
+              isAudioOnly: _selectedQuality?.isAudioOnly == true,
+              qualityId: _selectedQuality?.id,
+            );
           } else if (task.status == DownloadStatus.failed) {
             addLog('download failed: ${task.errorMessage ?? "unknown error"}');
           }
@@ -417,6 +685,18 @@ class DownloadController extends ChangeNotifier {
         if (!_recentQueue.any((t) => t.id == task.id)) {
           _recentQueue.insert(0, task);
         }
+
+        if (task.status == DownloadStatus.completed) {
+          _recordArchiveAndNotify(
+            task: task,
+            url: task.url,
+            qualityLabel: qualityToUse.label,
+            isAudioOnly: qualityToUse.isAudioOnly,
+            qualityId: qualityToUse.id,
+            playlistTitle: playlist.title,
+            notify: false,
+          );
+        }
       } catch (e) {
         task.status = DownloadStatus.failed;
         task.errorMessage = e.toString();
@@ -430,6 +710,13 @@ class DownloadController extends ChangeNotifier {
     final completed =
         _batchQueue.where((t) => t.status == DownloadStatus.completed).length;
     addLog('\$ spidey-batch-complete: $completed/${_batchQueue.length} tracks finished');
+    if (completed > 0) {
+      unawaited(_notificationService.sendBatchCompleteNotification(
+        count: completed,
+        destinationPath: _downloadDirectory,
+        onOpenFolder: () => _storageService.openDirectory(_downloadDirectory),
+      ));
+    }
     notifyListeners();
   }
 
