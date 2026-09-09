@@ -62,7 +62,7 @@ class VideoDownloaderApp extends StatelessWidget {
       valueListenable: notifier,
       builder: (context, currentMode, _) {
         return MaterialApp(
-          title: 'Video Downloader',
+          title: 'VINX',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,

@@ -67,7 +67,7 @@ void main() {
 
       expect(capturedExecutable, 'notify-send');
       expect(capturedArgs, contains('-a'));
-      expect(capturedArgs, contains('SPIDEY_DLX'));
+      expect(capturedArgs, contains('VINX'));
       expect(capturedArgs, contains('-A'));
       expect(capturedArgs, contains('open=Open File'));
       expect(capturedArgs, contains('folder=Open Folder'));

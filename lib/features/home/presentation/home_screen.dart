@@ -20,7 +20,7 @@ import '../widgets/engine_manager_dialog.dart';
 /// Active main panel view mode.
 enum HomeDeckView { deck, archive }
 
-/// SPIDEY_DLX — Web-Slinging Desktop Video Grabber Deck.
+/// VINX — High-Performance Desktop Media Grabber Deck.
 class HomeScreen extends StatefulWidget {
   final VideoController videoController;
   final DownloadController downloadController;
@@ -288,13 +288,29 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: _toggleSidebar,
               ),
               const SizedBox(width: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.asset(
+                  'assets/icon.png',
+                  width: 26,
+                  height: 26,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    width: 26,
+                    height: 26,
+                    color: isDark ? Colors.white24 : Colors.black12,
+                    child: Icon(Icons.bolt, size: 16, color: textHi),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               ReelSpinner(
                 isSpinning: isDownloading,
                 reelColor: isDark ? SpideyColors.darkBorderLit : SpideyColors.lightBorderLit,
                 spokeColor: textHi,
-                size: 26,
+                size: 22,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -302,29 +318,22 @@ class _HomeScreenState extends State<HomeScreen> {
                   RichText(
                     text: TextSpan(
                       style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 17,
-                        letterSpacing: -0.2,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                        letterSpacing: 0.5,
                         color: textHi,
                       ),
-                      children: [
-                        const TextSpan(text: 'SPIDEY'),
-                        TextSpan(
-                          text: '_DLX',
-                          style: TextStyle(
-                            color: isDark ? const Color(0xFF888888) : const Color(0xFF666666),
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
+                      children: const [
+                        TextSpan(text: 'VINX'),
                       ],
                     ),
                   ),
                   const SizedBox(height: 1),
                   Text(
-                    'WEB-SLINGING VIDEO GRABBER',
+                    'ULTRA-FAST MEDIA ENGINE',
                     style: TextStyle(
                       fontSize: 9.5,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                       letterSpacing: 0.8,
                       color: textDim,
                     ),
@@ -1230,7 +1239,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'SPIDEY_DLX requires yt-dlp to inspect links and extract media streams. You can download and install it into your local user vault with one click.',
+                              'VINX requires yt-dlp to inspect links and extract media streams. You can download and install it into your local user vault with one click.',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: isDark ? Colors.white70 : Colors.black87,

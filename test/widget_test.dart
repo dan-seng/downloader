@@ -144,14 +144,14 @@ void main() {
       downloadController: downloadController,
     ));
 
-    // Verify initial SPIDEY_DLX faceplate & deck state
+    // Verify initial VINX faceplate & deck state
     expect(
       find.byWidgetPredicate(
-        (w) => w is RichText && w.text.toPlainText().contains('SPIDEY_DLX'),
+        (w) => w is RichText && w.text.toPlainText().contains('VINX'),
       ),
       findsOneWidget,
     );
-    expect(find.textContaining('WEB-SLINGING VIDEO GRABBER'), findsOneWidget);
+    expect(find.textContaining('ULTRA-FAST MEDIA ENGINE'), findsOneWidget);
     expect(find.text('ANALYZE'), findsOneWidget);
     expect(find.text('No media target loaded'), findsOneWidget);
 

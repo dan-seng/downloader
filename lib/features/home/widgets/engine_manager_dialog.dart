@@ -75,16 +75,25 @@ class EngineManagerDialog extends StatelessWidget {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
                           color: bgWell,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: borderColor),
                         ),
-                        child: Icon(
-                          Icons.precision_manufacturing_outlined,
-                          size: 20,
-                          color: textHi,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: Image.asset(
+                            'assets/icon.png',
+                            width: 26,
+                            height: 26,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => Icon(
+                              Icons.precision_manufacturing_outlined,
+                              size: 20,
+                              color: textHi,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -92,7 +101,7 @@ class EngineManagerDialog extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'ENGINE SUBSYSTEM',
+                            'VINX ENGINE SUBSYSTEM',
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w800,
@@ -389,7 +398,7 @@ class EngineManagerDialog extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Why updates matter: Video platforms frequently alter stream algorithms. When extractions fail, clicking "UPDATE" installs the latest yt-dlp binary into your local user vault (~/.spidey_dlx/bin) without requiring app reinstallation.',
+                        'Why updates matter: Video platforms frequently alter stream algorithms. When extractions fail, clicking "UPDATE" installs the latest yt-dlp binary into your local user vault (~/.spidey_dlx/bin) without requiring VINX reinstallation.',
                         style: TextStyle(
                           fontSize: 10.5,
                           height: 1.4,

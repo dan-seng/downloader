@@ -1,4 +1,4 @@
-# SPIDEY_DLX 🕷️⚡
+# VINX ⚡
 
 An ultra-fast, minimalist desktop media extraction and audio mastering suite built with **Flutter Desktop**, powered by **yt-dlp** and **FFmpeg**.
 
@@ -34,10 +34,10 @@ If you just want to run the app without installing Flutter or building from sour
 
 1. Go to the [**Releases**](https://github.com/dan-seng/downloader/releases) page or download the latest automated build from [**GitHub Actions**](https://github.com/dan-seng/downloader/actions).
 2. **Windows (`.exe`)**:
-   - Download `SPIDEY_DLX-windows-x64.zip`.
+   - Download `VINX-windows-x64.zip`.
    - Extract the folder and double-click `video_downloader.exe`.
 3. **Linux**:
-   - Download `SPIDEY_DLX-linux-x64.tar.gz`.
+   - Download `VINX-linux-x64.tar.gz`.
    - Extract and run `./video_downloader`.
 4. **First Launch**:
    - If `yt-dlp` is not already installed on your system, click the **"INSTALL ENGINE"** button inside the app to automatically fetch the official standalone engine. No terminal required!
@@ -50,7 +50,7 @@ Before building or running the application, make sure the following system tools
 
 ### 1. Engine Dependencies
 
-`SPIDEY_DLX` executes `yt-dlp`, `ffmpeg`, and `notify-send` directly on the host system:
+`VINX` executes `yt-dlp`, `ffmpeg`, and `notify-send` directly on the host system:
 
 - **Debian / Ubuntu / Linux Mint**:
   ```bash

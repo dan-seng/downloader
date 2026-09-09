@@ -60,7 +60,7 @@ class NotificationService {
       try {
         final args = [
           '-a',
-          'SPIDEY_DLX',
+          'VINX',
           '-i',
           'video-x-generic',
           '-u',
@@ -108,7 +108,7 @@ class NotificationService {
       try {
         final args = [
           '-a',
-          'SPIDEY_DLX',
+          'VINX',
           '-i',
           'folder-download',
           '-u',

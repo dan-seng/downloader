@@ -80,7 +80,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('ENGINE SUBSYSTEM'), findsOneWidget);
+      expect(find.text('VINX ENGINE SUBSYSTEM'), findsOneWidget);
       expect(find.text('2025.01.20'), findsOneWidget);
       expect(find.text('UPDATE TO LATEST RELEASE'), findsOneWidget);
       expect(find.text('DETECTED'), findsOneWidget);
