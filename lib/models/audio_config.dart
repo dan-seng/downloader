@@ -14,13 +14,17 @@ enum AudioBitrate {
 
 /// Output audio container formats.
 enum AudioFormat {
-  mp3('mp3', 'MP3 (Universal ID3v2)'),
-  m4a('m4a', 'M4A (AAC / Apple)');
+  mp3('mp3', 'MP3 (Universal ID3v2)', isLossless: false),
+  m4a('m4a', 'M4A (AAC / Apple)', isLossless: false),
+  flac('flac', 'FLAC (Lossless Studio)', isLossless: true),
+  wav('wav', 'WAV (Uncompressed PCM)', isLossless: true),
+  opus('opus', 'OPUS (High-Efficiency Codec)', isLossless: false);
 
   final String id;
   final String label;
+  final bool isLossless;
 
-  const AudioFormat(this.id, this.label);
+  const AudioFormat(this.id, this.label, {this.isLossless = false});
 }
 
 /// Advanced audio extraction and metadata configuration.
@@ -41,6 +45,30 @@ class AudioConfig {
   static const studioMusic = AudioConfig(
     bitrate: AudioBitrate.kbps320,
     format: AudioFormat.mp3,
+    embedThumbnail: true,
+    embedMetadata: true,
+  );
+
+  /// Preset for audiophile lossless FLAC archiving.
+  static const losslessFlac = AudioConfig(
+    bitrate: AudioBitrate.vbr,
+    format: AudioFormat.flac,
+    embedThumbnail: true,
+    embedMetadata: true,
+  );
+
+  /// Preset for uncompressed studio master WAV.
+  static const studioWav = AudioConfig(
+    bitrate: AudioBitrate.vbr,
+    format: AudioFormat.wav,
+    embedThumbnail: false,
+    embedMetadata: true,
+  );
+
+  /// Preset for modern high-efficiency OPUS streaming.
+  static const opusStream = AudioConfig(
+    bitrate: AudioBitrate.kbps192,
+    format: AudioFormat.opus,
     embedThumbnail: true,
     embedMetadata: true,
   );
@@ -68,8 +96,8 @@ class AudioConfig {
       '--audio-format',
       format.id,
       '--audio-quality',
-      bitrate.qualityFlag,
-      if (embedThumbnail) ...[
+      format.isLossless ? '0' : bitrate.qualityFlag,
+      if (embedThumbnail && format != AudioFormat.wav) ...[
         '--embed-thumbnail',
         '--convert-thumbnails',
         'jpg',

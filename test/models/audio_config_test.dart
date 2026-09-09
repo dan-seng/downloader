@@ -67,18 +67,55 @@ void main() {
 
       expect(AudioConfig.vbrEfficient.bitrate, AudioBitrate.vbr);
       expect(AudioConfig.vbrEfficient.format, AudioFormat.mp3);
+
+      expect(AudioConfig.losslessFlac.format, AudioFormat.flac);
+      expect(AudioConfig.losslessFlac.format.isLossless, isTrue);
+
+      expect(AudioConfig.studioWav.format, AudioFormat.wav);
+      expect(AudioConfig.studioWav.format.isLossless, isTrue);
+      expect(AudioConfig.studioWav.embedThumbnail, isFalse);
+
+      expect(AudioConfig.opusStream.format, AudioFormat.opus);
+      expect(AudioConfig.opusStream.format.isLossless, isFalse);
+    });
+
+    test('lossless formats force quality 0 in buildArgs', () {
+      const flacConfig = AudioConfig(format: AudioFormat.flac);
+      final flacArgs = flacConfig.buildArgs();
+      expect(flacArgs, contains('--audio-format'));
+      expect(flacArgs[flacArgs.indexOf('--audio-format') + 1], 'flac');
+      expect(flacArgs, contains('--audio-quality'));
+      expect(flacArgs[flacArgs.indexOf('--audio-quality') + 1], '0');
+
+      const wavConfig = AudioConfig(format: AudioFormat.wav, embedThumbnail: true);
+      final wavArgs = wavConfig.buildArgs();
+      expect(wavArgs, contains('--audio-format'));
+      expect(wavArgs[wavArgs.indexOf('--audio-format') + 1], 'wav');
+      expect(wavArgs[wavArgs.indexOf('--audio-quality') + 1], '0');
+      // Thumbnail conversion is omitted for WAV
+      expect(wavArgs.contains('--embed-thumbnail'), isFalse);
+    });
+
+    test('opus format sets --audio-format opus with specified bitrate', () {
+      const opusConfig = AudioConfig(
+        format: AudioFormat.opus,
+        bitrate: AudioBitrate.kbps192,
+      );
+      final opusArgs = opusConfig.buildArgs();
+      expect(opusArgs[opusArgs.indexOf('--audio-format') + 1], 'opus');
+      expect(opusArgs[opusArgs.indexOf('--audio-quality') + 1], '192K');
     });
 
     test('copyWith updates fields correctly', () {
       const config = AudioConfig();
       final updated = config.copyWith(
         bitrate: AudioBitrate.kbps256,
-        format: AudioFormat.m4a,
+        format: AudioFormat.flac,
         embedThumbnail: false,
       );
 
       expect(updated.bitrate, AudioBitrate.kbps256);
-      expect(updated.format, AudioFormat.m4a);
+      expect(updated.format, AudioFormat.flac);
       expect(updated.embedThumbnail, isFalse);
       expect(updated.embedMetadata, isTrue);
     });
