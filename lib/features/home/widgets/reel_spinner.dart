@@ -11,8 +11,8 @@ class ReelSpinner extends StatefulWidget {
   const ReelSpinner({
     super.key,
     required this.isSpinning,
-    this.reelColor = const Color(0xFF2E3B47),
-    this.spokeColor = const Color(0xFFE8232A),
+    this.reelColor = const Color(0xFF444444),
+    this.spokeColor = const Color(0xFFCCCCCC),
     this.size = 30.0,
   });
 
@@ -131,7 +131,7 @@ class _ReelPainter extends CustomPainter {
 
     // Center hub circle
     final hubFill = Paint()
-      ..color = const Color(0xFF0A0E12)
+      ..color = const Color(0xFF0A0A0A)
       ..style = PaintingStyle.fill;
     canvas.drawCircle(Offset.zero, 3.5, hubFill);
     canvas.drawCircle(Offset.zero, 3.5, spokePaint);

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Modern sleek progress indicator showing download progress, speed, and ETA.
+/// Modern sleek progress indicator showing download progress, speed, and ETA with live animations.
 class VuMeter extends StatelessWidget {
   final double progress; // 0.0 to 1.0
   final String speedText;
@@ -30,7 +30,7 @@ class VuMeter extends StatelessWidget {
         ? (etaText.isNotEmpty ? 'ETA $etaText' : 'ETA —:—')
         : (progress >= 1.0 ? 'ETA 0:00' : 'ETA —:—');
 
-    final trackColor = isDark ? const Color(0xFF1E2631) : const Color(0xFFE2E8F0);
+    final trackColor = isDark ? const Color(0xFF222222) : const Color(0xFFE5E5E5);
     final textNorm = isDark ? SpideyColors.darkText : SpideyColors.lightText;
     final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
 
@@ -50,9 +50,9 @@ class VuMeter extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                     decoration: BoxDecoration(
-                      color: isDownloading
-                          ? SpideyColors.spideyRedGlow
-                          : (progress >= 1.0 ? const Color(0x3322C55E) : Colors.transparent),
+                      color: isDownloading || progress >= 1.0
+                          ? (isDark ? const Color(0xFF2E2E2E) : const Color(0xFFE5E5E5))
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -60,9 +60,9 @@ class VuMeter extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11.5,
                         letterSpacing: 0.3,
-                        color: isDownloading
-                            ? SpideyColors.spideyRed
-                            : (progress >= 1.0 ? SpideyColors.spideyGreen : textNorm),
+                        color: isDownloading || progress >= 1.0
+                            ? (isDark ? Colors.white : Colors.black)
+                            : textNorm,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -82,7 +82,7 @@ class VuMeter extends StatelessWidget {
           ),
           const SizedBox(height: 8),
 
-          // Smooth modern continuous progress bar
+          // Smooth modern continuous progress bar with zero-idle-overhead tween interpolation
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
             child: Container(
@@ -91,34 +91,22 @@ class VuMeter extends StatelessWidget {
                 color: trackColor,
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: Stack(
-                children: [
-                  FractionallySizedBox(
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0.0, end: progress.clamp(0.0, 1.0)),
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutCubic,
+                builder: (context, animatedValue, _) {
+                  return FractionallySizedBox(
                     alignment: Alignment.centerLeft,
-                    widthFactor: progress.clamp(0.0, 1.0),
+                    widthFactor: animatedValue,
                     child: Container(
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: isDownloading
-                              ? [SpideyColors.spideyRed, const Color(0xFFFF5258)]
-                              : (progress >= 1.0
-                                  ? [SpideyColors.spideyGreen, const Color(0xFF4ADE80)]
-                                  : [SpideyColors.spideyRed, SpideyColors.spideyRed]),
-                        ),
+                        color: isDark ? Colors.white : Colors.black,
                         borderRadius: BorderRadius.circular(6),
-                        boxShadow: isDownloading
-                            ? [
-                                BoxShadow(
-                                  color: SpideyColors.spideyRed.withValues(alpha: 0.4),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ]
-                            : null,
                       ),
                     ),
-                  ),
-                ],
+                  );
+                },
               ),
             ),
           ),

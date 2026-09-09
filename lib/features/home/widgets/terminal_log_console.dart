@@ -24,11 +24,7 @@ class _TerminalLogConsoleState extends State<TerminalLogConsole> {
     if (widget.logs.length != oldWidget.logs.length) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 150),
-            curve: Curves.easeOut,
-          );
+          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
         }
       });
     }
@@ -45,13 +41,15 @@ class _TerminalLogConsoleState extends State<TerminalLogConsole> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final bgWell = isDark ? const Color(0xFF0F141C) : const Color(0xFFF1F5F9);
+    final bgWell = isDark ? SpideyColors.darkBgWell : SpideyColors.lightBgWell;
     final borderColor = isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder;
     final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
 
     final latestLog = widget.logs.isNotEmpty ? widget.logs.last : 'Ready';
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOutCubic,
       decoration: BoxDecoration(
         color: bgWell,
         border: Border(
@@ -83,6 +81,17 @@ class _TerminalLogConsoleState extends State<TerminalLogConsole> {
                         color: textDim,
                       ),
                       const SizedBox(width: 8),
+                      if (widget.logs.isNotEmpty) ...[
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isDark ? Colors.white : Colors.black,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                       Text(
                         'SUBPROCESS OUTPUT',
                         style: TextStyle(
@@ -132,48 +141,58 @@ class _TerminalLogConsoleState extends State<TerminalLogConsole> {
             ),
           ),
 
-          // Log Lines (When expanded)
-          if (_isExpanded) ...[
-            const Divider(height: 1, thickness: 1),
-            Container(
-              height: 130,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: widget.logs.isEmpty
-                  ? Align(
-                      alignment: Alignment.topLeft,
-                      child: Text(
-                        'deck ready — waiting for a link',
-                        style: TextStyle(
-                          fontFamily: 'monospace',
-                          fontSize: 11.5,
-                          color: textDim,
-                        ),
+          // Log Lines with AnimatedSize smooth drawer expansion
+          AnimatedSize(
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeInOutCubic,
+            child: _isExpanded
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Divider(height: 1, thickness: 1),
+                      Container(
+                        height: 130,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: widget.logs.isEmpty
+                            ? Align(
+                                alignment: Alignment.topLeft,
+                                child: Text(
+                                  'deck ready — waiting for a link',
+                                  style: TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 11.5,
+                                    color: textDim,
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                controller: _scrollController,
+                                itemCount: widget.logs.length + 1,
+                                itemBuilder: (context, index) {
+                                  if (index == widget.logs.length) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 2, bottom: 4),
+                                      child: _TerminalPromptCursor(
+                                        color: isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi,
+                                      ),
+                                    );
+                                  }
+                                  final line = widget.logs[index];
+                                  return _buildLogLine(line, isDark);
+                                },
+                              ),
                       ),
-                    )
-                  : ListView.builder(
-                      controller: _scrollController,
-                      itemCount: widget.logs.length,
-                      itemBuilder: (context, index) {
-                        final line = widget.logs[index];
-                        return _buildLogLine(line, isDark);
-                      },
-                    ),
-            ),
-          ],
+                    ],
+                  )
+                : const SizedBox.shrink(),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildLogLine(String rawLine, bool isDark) {
-    Color textColor = isDark ? SpideyColors.darkText : SpideyColors.lightText;
-    if (rawLine.contains('[download]') || rawLine.contains('ready') || rawLine.contains('resolved')) {
-      textColor = SpideyColors.spideyGreen;
-    } else if (rawLine.contains('WARNING') || rawLine.contains('ETA')) {
-      textColor = SpideyColors.spideyBlue;
-    } else if (rawLine.contains('ERROR') || rawLine.contains('failed')) {
-      textColor = SpideyColors.spideyGold;
-    }
+    final Color textColor = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
 
     // Split timestamp if formatted like "18:30:12  message"
     String timePart = '';
@@ -209,6 +228,24 @@ class _TerminalLogConsoleState extends State<TerminalLogConsole> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Monospace terminal prompt cursor.
+class _TerminalPromptCursor extends StatelessWidget {
+  final Color color;
+  const _TerminalPromptCursor({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      '▋',
+      style: TextStyle(
+        fontSize: 10,
+        color: color.withValues(alpha: 0.6),
+        fontFamily: 'monospace',
       ),
     );
   }
