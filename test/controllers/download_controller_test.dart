@@ -1,3 +1,4 @@
+import 'dart:io' as io;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:video_downloader/controllers/download_controller.dart';
 import 'package:video_downloader/models/audio_config.dart';
@@ -10,7 +11,39 @@ import 'package:video_downloader/models/video_format.dart';
 import 'package:video_downloader/models/video_info.dart';
 import 'package:video_downloader/services/archive_service.dart';
 import 'package:video_downloader/services/download_service.dart';
+import 'package:video_downloader/services/engine_service.dart';
+import 'package:video_downloader/services/process_service.dart';
 import 'package:video_downloader/services/storage_service.dart';
+
+class _MockControllerProcessService implements ProcessService {
+  final Map<String, io.ProcessResult> responses;
+  _MockControllerProcessService(this.responses);
+
+  @override
+  Future<io.ProcessResult> run(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Map<String, String>? environment,
+  }) async {
+    final key = '$executable ${arguments.join(' ')}';
+    if (responses.containsKey(key)) {
+      return responses[key]!;
+    }
+    return io.ProcessResult(0, 1, '', 'not found');
+  }
+
+  @override
+  Future<io.Process> start(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Map<String, String>? environment,
+    io.ProcessStartMode mode = io.ProcessStartMode.normal,
+  }) {
+    throw UnimplementedError();
+  }
+}
 
 class MockStorageService extends StorageService {
   String? openedDirectory;
@@ -422,6 +455,56 @@ void main() {
       final success = await controller.deleteArchiveItem('del-1');
       expect(success, isTrue);
       expect(controller.archiveItems, isEmpty);
+    });
+
+    test('checkEngine verifies engine information from engineService', () async {
+      final mockProcess = _MockControllerProcessService({
+        'yt-dlp --version': io.ProcessResult(1, 0, '2025.01.10\n', ''),
+        'ffmpeg -version': io.ProcessResult(2, 0, 'ffmpeg version 6.1\n', ''),
+      });
+      final engineService = EngineService(
+        processService: mockProcess,
+        customHomeDir: '/tmp/test_home_check',
+      );
+      final ctrl = DownloadController(
+        downloadService: mockDownloadService,
+        storageService: mockStorageService,
+        archiveService: MockArchiveService(),
+        engineService: engineService,
+      );
+
+      await ctrl.checkEngine();
+      expect(ctrl.engineInfo?.isYtdlpReady, isTrue);
+      expect(ctrl.engineInfo?.ytdlpVersion, '2025.01.10');
+      expect(ctrl.engineInfo?.ffmpegAvailable, isTrue);
+    });
+
+    test('updateEngine downloads new binary and updates engine state', () async {
+      final mockProcess = _MockControllerProcessService({
+        'chmod +x /tmp/test_home_update/.spidey_dlx/bin/yt-dlp': io.ProcessResult(1, 0, '', ''),
+        '/tmp/test_home_update/.spidey_dlx/bin/yt-dlp --version': io.ProcessResult(2, 0, '2025.02.20\n', ''),
+        'ffmpeg -version': io.ProcessResult(3, 0, 'ffmpeg version 6.1\n', ''),
+      });
+      final engineService = EngineService(
+        processService: mockProcess,
+        customHomeDir: '/tmp/test_home_update',
+        binaryDownloader: (uri, dest, {onProgress}) async {
+          dest.parent.createSync(recursive: true);
+          dest.writeAsStringSync('binary');
+        },
+      );
+      final ctrl = DownloadController(
+        downloadService: mockDownloadService,
+        storageService: mockStorageService,
+        archiveService: MockArchiveService(),
+        engineService: engineService,
+      );
+
+      final success = await ctrl.updateEngine();
+      expect(success, isTrue);
+      expect(ctrl.engineInfo?.isYtdlpReady, isTrue);
+      expect(ctrl.engineInfo?.ytdlpVersion, '2025.02.20');
+      expect(ctrl.engineInfo?.ytdlpSource, EngineBinarySource.userBin);
     });
   });
 }

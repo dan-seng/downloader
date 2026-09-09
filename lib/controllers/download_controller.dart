@@ -11,16 +11,19 @@ import '../models/time_range_clip.dart';
 import '../models/video_info.dart';
 import '../services/archive_service.dart';
 import '../services/download_service.dart';
+import '../services/engine_service.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 
 /// Controller managing quality selection, destination directories,
-/// live download tasks, desktop notifications, and persistent library archives.
+/// live download tasks, desktop notifications, persistent library archives,
+/// and hybrid yt-dlp / FFmpeg engine lifecycle.
 class DownloadController extends ChangeNotifier {
   final DownloadService _downloadService;
   final StorageService _storageService;
   final NotificationService _notificationService;
   final ArchiveService _archiveService;
+  final EngineService _engineService;
 
   String _downloadDirectory = '';
   QualityOption? _selectedQuality;
@@ -39,15 +42,25 @@ class DownloadController extends ChangeNotifier {
   ArchiveSort _archiveSort = ArchiveSort.newest;
   bool _notificationsEnabled = true;
 
+  EngineInfo? _engineInfo;
+  bool _isEngineUpdating = false;
+  double _engineUpdateProgress = 0.0;
+  String _engineUpdateMessage = '';
+
   DownloadController({
     DownloadService? downloadService,
     StorageService? storageService,
     NotificationService? notificationService,
     ArchiveService? archiveService,
-  })  : _downloadService = downloadService ?? DownloadService(),
+    EngineService? engineService,
+  })  : _engineService = engineService ?? EngineService(),
         _storageService = storageService ?? const StorageService(),
         _notificationService = notificationService ?? NotificationService(),
-        _archiveService = archiveService ?? ArchiveService();
+        _archiveService = archiveService ?? ArchiveService(),
+        _downloadService = downloadService ??
+            DownloadService(
+              engineService: engineService ?? EngineService(),
+            );
 
   final List<String> _consoleLogs = [];
   final List<DownloadTask> _recentQueue = [];
@@ -67,6 +80,11 @@ class DownloadController extends ChangeNotifier {
   bool get notificationsEnabled => _notificationsEnabled;
   NotificationService get notificationService => _notificationService;
   ArchiveService get archiveService => _archiveService;
+  EngineService get engineService => _engineService;
+  EngineInfo? get engineInfo => _engineInfo;
+  bool get isEngineUpdating => _isEngineUpdating;
+  double get engineUpdateProgress => _engineUpdateProgress;
+  String get engineUpdateMessage => _engineUpdateMessage;
   List<DownloadArchiveItem> get archiveItems => List.unmodifiable(_archiveItems);
   String get archiveSearchQuery => _archiveSearchQuery;
   ArchiveFilter get archiveFilter => _archiveFilter;
@@ -366,13 +384,60 @@ class DownloadController extends ChangeNotifier {
     }
   }
 
-  /// Initializes the default download directory from system paths and loads archive.
+  /// Initializes the default download directory from system paths, loads archive, and verifies engine.
   Future<void> initialize() async {
     if (_downloadDirectory.isEmpty) {
       _downloadDirectory = await _storageService.getDefaultDownloadsDirectory();
     }
     await loadArchive();
+    await checkEngine();
     notifyListeners();
+  }
+
+  /// Runs a discovery scan to check for yt-dlp and ffmpeg binaries across the hybrid hierarchy.
+  Future<void> checkEngine() async {
+    try {
+      _engineInfo = await _engineService.checkEngine();
+      if (_engineInfo != null && _engineInfo!.isYtdlpReady) {
+        addLog('engine verified: yt-dlp ${_engineInfo!.ytdlpVersion ?? ""} (${_engineInfo!.sourceLabel})');
+      } else {
+        addLog('engine warning: yt-dlp not detected in user bin, bundle, or system PATH');
+      }
+    } catch (e) {
+      addLog('engine check error: $e');
+    }
+    notifyListeners();
+  }
+
+  /// Downloads or updates yt-dlp into the user bin vault (~/.spidey_dlx/bin/yt-dlp).
+  Future<bool> updateEngine() async {
+    if (_isEngineUpdating) return false;
+    _isEngineUpdating = true;
+    _engineUpdateProgress = 0.05;
+    _engineUpdateMessage = 'Connecting to GitHub releases...';
+    notifyListeners();
+
+    try {
+      addLog('initiating engine download from official release channel...');
+      final info = await _engineService.downloadOrUpdateYtDlp(
+        onProgress: (progress, status) {
+          _engineUpdateProgress = progress;
+          _engineUpdateMessage = status;
+          notifyListeners();
+        },
+      );
+      _engineInfo = info;
+      _engineUpdateMessage = 'Engine ready: yt-dlp ${info.ytdlpVersion ?? "installed"}';
+      addLog('engine updated successfully: yt-dlp ${info.ytdlpVersion ?? ""} (${info.sourceLabel})');
+      return true;
+    } catch (e) {
+      _engineUpdateMessage = 'Failed to update engine: $e';
+      addLog('engine update error: $e');
+      return false;
+    } finally {
+      _isEngineUpdating = false;
+      notifyListeners();
+    }
   }
 
   /// Sets the currently analyzed video and derives available quality options.
