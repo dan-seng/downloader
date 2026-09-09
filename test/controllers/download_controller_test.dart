@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:video_downloader/controllers/download_controller.dart';
+import 'package:video_downloader/models/audio_config.dart';
 import 'package:video_downloader/models/download_task.dart';
 import 'package:video_downloader/models/quality_option.dart';
+import 'package:video_downloader/models/speed_limit.dart';
 import 'package:video_downloader/models/video_format.dart';
 import 'package:video_downloader/models/video_info.dart';
 import 'package:video_downloader/services/download_service.dart';
@@ -19,6 +21,8 @@ class MockStorageService extends StorageService {
 class MockDownloadService extends DownloadService {
   bool downloadStarted = false;
   bool downloadCancelled = false;
+  AudioConfig? lastAudioConfig;
+  SpeedLimit? lastSpeedLimit;
 
   @override
   Future<void> startDownload({
@@ -27,8 +31,12 @@ class MockDownloadService extends DownloadService {
     required String destinationDirectory,
     required DownloadProgressCallback onProgress,
     DownloadLogCallback? onLog,
+    AudioConfig? audioConfig,
+    SpeedLimit? speedLimit,
   }) async {
     downloadStarted = true;
+    lastAudioConfig = audioConfig;
+    lastSpeedLimit = speedLimit;
     onLog?.call('[download] 50% of 10.0MiB at 5.0MiB/s ETA 00:01');
     final task = DownloadTask(
       id: video.id,
@@ -137,6 +145,72 @@ void main() {
     test('cancelDownload invokes service cancellation', () async {
       await controller.cancelDownload();
       expect(mockDownloadService.downloadCancelled, isTrue);
+    });
+
+    test('updates audioConfig settings and applies presets', () {
+      expect(controller.audioConfig.bitrate, AudioBitrate.kbps320);
+
+      controller.setAudioBitrate(AudioBitrate.kbps256);
+      expect(controller.audioConfig.bitrate, AudioBitrate.kbps256);
+
+      controller.setAudioFormat(AudioFormat.m4a);
+      expect(controller.audioConfig.format, AudioFormat.m4a);
+
+      controller.setEmbedThumbnail(false);
+      expect(controller.audioConfig.embedThumbnail, isFalse);
+
+      controller.setEmbedMetadata(false);
+      expect(controller.audioConfig.embedMetadata, isFalse);
+
+      controller.applyAudioPreset(AudioConfig.podcast);
+      expect(controller.audioConfig.bitrate, AudioBitrate.kbps192);
+      expect(controller.audioConfig.format, AudioFormat.mp3);
+      expect(controller.audioConfig.embedThumbnail, isTrue);
+    });
+
+    test('startDownload forwards audioConfig to download service', () async {
+      const video = VideoInfo(
+        id: 'vid-audio',
+        title: 'Audio Test',
+        formats: [
+          VideoFormat(formatId: '1', height: 720, videoCodec: 'h264'),
+        ],
+      );
+
+      controller.setVideo(video);
+      controller.applyAudioPreset(AudioConfig.studioMusic);
+      await controller.startDownload(video);
+
+      expect(mockDownloadService.lastAudioConfig, isNotNull);
+      expect(mockDownloadService.lastAudioConfig?.bitrate, AudioBitrate.kbps320);
+      expect(mockDownloadService.lastAudioConfig?.format, AudioFormat.mp3);
+    });
+
+    test('updates speedLimit and scheduleDelay state', () {
+      expect(controller.speedLimit, SpeedLimit.unlimited);
+      expect(controller.scheduleDelay, ScheduleDelay.none);
+
+      controller.setSpeedLimit(SpeedLimit.mbps10);
+      expect(controller.speedLimit, SpeedLimit.mbps10);
+
+      controller.setScheduleDelay(ScheduleDelay.min15);
+      expect(controller.scheduleDelay, ScheduleDelay.min15);
+    });
+
+    test('startDownload forwards speedLimit to download service', () async {
+      const video = VideoInfo(
+        id: 'vid-speed',
+        title: 'Speed Test',
+        formats: [
+          VideoFormat(formatId: '1', height: 720, videoCodec: 'h264'),
+        ],
+      );
+
+      controller.setVideo(video);
+      controller.setSpeedLimit(SpeedLimit.mbps5);
+      await controller.startDownload(video);
+
+      expect(mockDownloadService.lastSpeedLimit, SpeedLimit.mbps5);
     });
   });
 }
