@@ -62,7 +62,7 @@ class EngineManagerDialog extends StatelessWidget {
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 580),
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -310,71 +310,106 @@ class EngineManagerDialog extends StatelessWidget {
 
               // FFmpeg Card
               Container(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: bgWell,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: borderColor),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: isFfmpegReady
-                                  ? (isDark ? const Color(0xFFCCCCCC) : const Color(0xFF333333))
-                                  : (isDark ? const Color(0xFF888888) : const Color(0xFF999999)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isFfmpegReady
+                                    ? (isDark ? const Color(0xFFCCCCCC) : const Color(0xFF333333))
+                                    : (isDark ? Colors.amberAccent : Colors.orange),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'FFmpeg Media Subsystem',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: textHi,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFE8E8E8),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: borderColor),
+                          ),
+                          child: Text(
+                            isFfmpegReady ? 'DETECTED' : 'NOT FOUND',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: isFfmpegReady ? textHi : textDim,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'FFmpeg Transcoder',
-                                  style: TextStyle(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.bold,
-                                    color: textHi,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  isFfmpegReady ? ffmpegVersion : 'Optional for basic MP4, required for FLAC/WAV',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontFamily: isFfmpegReady ? 'monospace' : null,
-                                    color: textDim,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Source: ${info?.ffmpegSourceLabel ?? "Scanning..."}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: textHi,
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFE8E8E8),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: borderColor),
+                    const SizedBox(height: 2),
+                    Text(
+                      isFfmpegReady ? ffmpegVersion : 'Required to mux separate audio/video streams & transcode MP3/FLAC',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontFamily: isFfmpegReady ? 'monospace' : null,
+                        color: textDim,
                       ),
-                      child: Text(
-                        isFfmpegReady ? 'DETECTED' : 'NOT FOUND',
-                        style: TextStyle(
-                          fontSize: 10,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 14),
+                    ElevatedButton.icon(
+                      key: const ValueKey('ffmpeg_dialog_action_button'),
+                      onPressed: isUpdating
+                          ? null
+                          : () async {
+                              await downloadController.updateFfmpeg();
+                            },
+                      icon: Icon(
+                        isFfmpegReady ? Icons.refresh : Icons.download,
+                        size: 14,
+                      ),
+                      label: Text(
+                        isFfmpegReady ? 'UPDATE FFMPEG' : 'DOWNLOAD & INSTALL FFMPEG',
+                        style: const TextStyle(
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: isFfmpegReady ? textHi : textDim,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isDark ? Colors.white : Colors.black,
+                        foregroundColor: isDark ? Colors.black : Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
                     ),
@@ -398,7 +433,7 @@ class EngineManagerDialog extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Why updates matter: Video platforms frequently alter stream algorithms. When extractions fail, clicking "UPDATE" installs the latest yt-dlp binary into your local user vault (~/.spidey_dlx/bin) without requiring VINX reinstallation.',
+                        'Why packages matter: Video platforms frequently alter stream algorithms. When extractions fail, clicking "UPDATE" installs the latest binaries into your local user vault (~/.spidey_dlx/bin) without requiring VINX reinstallation. FFmpeg is required to mux video and audio streams together.',
                         style: TextStyle(
                           fontSize: 10.5,
                           height: 1.4,

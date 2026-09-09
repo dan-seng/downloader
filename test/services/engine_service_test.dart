@@ -180,5 +180,93 @@ void main() {
       expect(info.ytdlpVersion, '2025.02.01');
       expect(progressEvents, isNotEmpty);
     });
+
+    test('detects FFmpeg in user vault and resolves getFfmpegDirectory()', () async {
+      final userBinDir = io.Directory('${tempDir.path}/.spidey_dlx/bin');
+      userBinDir.createSync(recursive: true);
+
+      final userFfmpeg = io.File('${userBinDir.path}/ffmpeg');
+      userFfmpeg.writeAsStringSync('binary content');
+
+      final mockProcess = _MockProcessService({
+        'yt-dlp --version': io.ProcessResult(1, 0, '2025.01.15\n', ''),
+        '${userFfmpeg.path} -version': io.ProcessResult(2, 0, 'ffmpeg version 7.0-static\n', ''),
+      });
+
+      final service = EngineService(
+        processService: mockProcess,
+        customHomeDir: tempDir.path,
+      );
+
+      final info = await service.checkEngine();
+
+      expect(info.ffmpegAvailable, isTrue);
+      expect(info.ffmpegSource, EngineBinarySource.userBin);
+      expect(info.ffmpegPath, userFfmpeg.path);
+      expect(info.ffmpegVersion, contains('ffmpeg version 7.0'));
+      expect(service.getFfmpegDirectory(), userBinDir.path);
+    });
+
+    test('detects FFmpeg in app bundle and resolves directory', () async {
+      final bundleDir = io.Directory('${tempDir.path}/bundle/data/bin');
+      bundleDir.createSync(recursive: true);
+
+      final bundleFfmpeg = io.File('${bundleDir.path}/ffmpeg');
+      bundleFfmpeg.writeAsStringSync('bundled ffmpeg');
+
+      final mockProcess = _MockProcessService({
+        'yt-dlp --version': io.ProcessResult(1, 0, '2025.01.15\n', ''),
+        '${bundleFfmpeg.path} -version': io.ProcessResult(2, 0, 'ffmpeg version 6.1\n', ''),
+      });
+
+      final service = EngineService(
+        processService: mockProcess,
+        customHomeDir: tempDir.path,
+        customBundleDir: '${tempDir.path}/bundle',
+      );
+
+      final info = await service.checkEngine();
+
+      expect(info.ffmpegAvailable, isTrue);
+      expect(info.ffmpegSource, EngineBinarySource.bundled);
+      expect(service.getFfmpegDirectory(), bundleDir.path);
+    });
+
+    test('downloads and installs all packages sequentially', () async {
+      final userBinDir = '${tempDir.path}/.spidey_dlx/bin';
+      final ytdlpPath = '$userBinDir/yt-dlp';
+      final ffmpegPath = '$userBinDir/ffmpeg';
+
+      final mockProcess = _MockProcessService({
+        'chmod +x $ytdlpPath': io.ProcessResult(1, 0, '', ''),
+        'chmod +x $ffmpegPath': io.ProcessResult(2, 0, '', ''),
+        'chmod +x $userBinDir/ffprobe': io.ProcessResult(3, 0, '', ''),
+        '$ytdlpPath --version': io.ProcessResult(4, 0, '2025.03.01\n', ''),
+        '$ffmpegPath -version': io.ProcessResult(5, 0, 'ffmpeg version 7.1\n', ''),
+      });
+
+      final service = EngineService(
+        processService: mockProcess,
+        customHomeDir: tempDir.path,
+        binaryDownloader: (uri, dest, {onProgress}) async {
+          dest.parent.createSync(recursive: true);
+          onProgress?.call(0.5, 'Downloading...');
+          // If it's the ffmpeg archive, write the ffmpeg executable to userBinDir
+          if (uri.path.contains('ffmpeg')) {
+            final f = io.File(ffmpegPath);
+            f.writeAsStringSync('mock ffmpeg');
+          } else {
+            dest.writeAsStringSync('mock yt-dlp');
+          }
+          onProgress?.call(1.0, 'Done');
+        },
+      );
+
+      final info = await service.downloadOrUpdateAllPackages();
+
+      expect(info.isReady, isTrue);
+      expect(info.isYtdlpReady, isTrue);
+      expect(info.ffmpegAvailable, isTrue);
+    });
   });
 }

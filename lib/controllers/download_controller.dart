@@ -384,29 +384,94 @@ class DownloadController extends ChangeNotifier {
     }
   }
 
-  /// Initializes the default download directory from system paths, loads archive, and verifies engine.
-  Future<void> initialize() async {
+  /// Initializes the default download directory from system paths, loads archive, and verifies engine packages.
+  Future<void> initialize({bool autoInstallMissing = true}) async {
     if (_downloadDirectory.isEmpty) {
       _downloadDirectory = await _storageService.getDefaultDownloadsDirectory();
     }
     await loadArchive();
     await checkEngine();
+    if (autoInstallMissing && _engineInfo != null && !_engineInfo!.isReady) {
+      await installRequiredPackages();
+    }
     notifyListeners();
   }
 
-  /// Runs a discovery scan to check for yt-dlp and ffmpeg binaries across the hybrid hierarchy.
+  /// Runs a discovery scan to check for yt-dlp and FFmpeg binaries across the hybrid hierarchy.
   Future<void> checkEngine() async {
     try {
       _engineInfo = await _engineService.checkEngine();
-      if (_engineInfo != null && _engineInfo!.isYtdlpReady) {
-        addLog('engine verified: yt-dlp ${_engineInfo!.ytdlpVersion ?? ""} (${_engineInfo!.sourceLabel})');
-      } else {
-        addLog('engine warning: yt-dlp not detected in user bin, bundle, or system PATH');
+      if (_engineInfo != null) {
+        if (_engineInfo!.isYtdlpReady) {
+          addLog('engine verified: yt-dlp ${_engineInfo!.ytdlpVersion ?? ""} (${_engineInfo!.sourceLabel})');
+        } else {
+          addLog('engine warning: yt-dlp not detected in user bin, bundle, or system PATH');
+        }
+        if (_engineInfo!.ffmpegAvailable) {
+          addLog('engine verified: FFmpeg ${_engineInfo!.ffmpegVersion ?? ""} (${_engineInfo!.ffmpegSourceLabel})');
+        } else {
+          addLog('engine notice: FFmpeg not detected in user bin, bundle, or system PATH');
+        }
       }
     } catch (e) {
       addLog('engine check error: $e');
     }
     notifyListeners();
+  }
+
+  /// Downloads and installs all missing engine packages (yt-dlp and FFmpeg) into the user vault.
+  Future<bool> installRequiredPackages() async {
+    if (_isEngineUpdating) return false;
+    _isEngineUpdating = true;
+    _engineUpdateProgress = 0.05;
+    _engineUpdateMessage = 'Installing packages...';
+    notifyListeners();
+
+    try {
+      addLog('initiating automatic package installation (yt-dlp & FFmpeg)...');
+      final needsYtdlp = _engineInfo == null || !_engineInfo!.isYtdlpReady;
+      final needsFfmpeg = _engineInfo == null || !_engineInfo!.ffmpegAvailable;
+
+      if (needsYtdlp && needsFfmpeg) {
+        final info = await _engineService.downloadOrUpdateAllPackages(
+          onProgress: (progress, status) {
+            _engineUpdateProgress = progress;
+            _engineUpdateMessage = status;
+            notifyListeners();
+          },
+        );
+        _engineInfo = info;
+      } else if (needsYtdlp) {
+        final info = await _engineService.downloadOrUpdateYtDlp(
+          onProgress: (progress, status) {
+            _engineUpdateProgress = progress;
+            _engineUpdateMessage = 'Installing packages: $status';
+            notifyListeners();
+          },
+        );
+        _engineInfo = info;
+      } else if (needsFfmpeg) {
+        final info = await _engineService.downloadOrUpdateFfmpeg(
+          onProgress: (progress, status) {
+            _engineUpdateProgress = progress;
+            _engineUpdateMessage = 'Installing packages: $status';
+            notifyListeners();
+          },
+        );
+        _engineInfo = info;
+      }
+
+      _engineUpdateMessage = 'Packages installed successfully';
+      addLog('packages installed successfully: yt-dlp ${_engineInfo?.ytdlpVersion ?? ""} & FFmpeg ${_engineInfo?.ffmpegVersion ?? ""}');
+      return true;
+    } catch (e) {
+      _engineUpdateMessage = 'Failed to install packages: $e';
+      addLog('package installation error: $e');
+      return false;
+    } finally {
+      _isEngineUpdating = false;
+      notifyListeners();
+    }
   }
 
   /// Downloads or updates yt-dlp into the user bin vault (~/.spidey_dlx/bin/yt-dlp).
@@ -433,6 +498,37 @@ class DownloadController extends ChangeNotifier {
     } catch (e) {
       _engineUpdateMessage = 'Failed to update engine: $e';
       addLog('engine update error: $e');
+      return false;
+    } finally {
+      _isEngineUpdating = false;
+      notifyListeners();
+    }
+  }
+
+  /// Downloads or updates FFmpeg into the user bin vault (~/.spidey_dlx/bin/ffmpeg).
+  Future<bool> updateFfmpeg() async {
+    if (_isEngineUpdating) return false;
+    _isEngineUpdating = true;
+    _engineUpdateProgress = 0.05;
+    _engineUpdateMessage = 'Connecting to FFmpeg release server...';
+    notifyListeners();
+
+    try {
+      addLog('initiating FFmpeg download...');
+      final info = await _engineService.downloadOrUpdateFfmpeg(
+        onProgress: (progress, status) {
+          _engineUpdateProgress = progress;
+          _engineUpdateMessage = status;
+          notifyListeners();
+        },
+      );
+      _engineInfo = info;
+      _engineUpdateMessage = 'FFmpeg ready: ${info.ffmpegVersion ?? "installed"}';
+      addLog('FFmpeg updated successfully: ${info.ffmpegVersion ?? ""} (${info.ffmpegSourceLabel})');
+      return true;
+    } catch (e) {
+      _engineUpdateMessage = 'Failed to update FFmpeg: $e';
+      addLog('FFmpeg update error: $e');
       return false;
     } finally {
       _isEngineUpdating = false;

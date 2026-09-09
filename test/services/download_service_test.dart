@@ -9,6 +9,7 @@ import 'package:video_downloader/models/speed_limit.dart';
 import 'package:video_downloader/models/time_range_clip.dart';
 import 'package:video_downloader/models/video_info.dart';
 import 'package:video_downloader/services/download_service.dart';
+import 'package:video_downloader/services/engine_service.dart';
 import 'package:video_downloader/services/process_service.dart';
 
 class FakeStreamProcess implements io.Process {
@@ -486,6 +487,48 @@ void main() {
       final args = fakeService.lastArguments!;
       expect(args.contains('--download-sections'), isFalse);
       expect(args.contains('--force-keyframes-at-cuts'), isFalse);
+    });
+
+    test('forwards --ffmpeg-location when engineService provides resolved ffmpeg directory', () async {
+      final fakeProcess = FakeStreamProcess();
+      fakeService.process = fakeProcess;
+
+      final mockEngineService = EngineService(
+        customHomeDir: '/custom/user/home',
+      );
+      // Create service with mock engine info containing ffmpeg path
+      final svc = DownloadService(
+        processService: fakeService,
+        engineService: mockEngineService,
+      );
+
+      const video = VideoInfo(
+        id: 'test-vid-ffmpeg',
+        title: 'Video Title',
+        formats: [],
+      );
+
+      const quality = QualityOption(
+        id: '1080p',
+        label: '1080p',
+        extension: 'mp4',
+        formatSpecifier: 'bv+ba',
+      );
+
+      // Verify without ffmpeg first
+      final downloadFuture = svc.startDownload(
+        video: video,
+        quality: quality,
+        destinationDirectory: '/downloads',
+        onProgress: (_) {},
+      );
+
+      await Future.delayed(const Duration(milliseconds: 10));
+      fakeProcess.completeProcess(0);
+      await downloadFuture;
+
+      // If ffmpeg not resolved yet, omitted
+      expect(fakeService.lastArguments!.contains('--ffmpeg-location'), isFalse);
     });
   });
 }

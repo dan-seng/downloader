@@ -48,11 +48,16 @@ class YtDlpService {
   Future<PlaylistInfo> fetchPlaylistInfo(String rawUrl) async {
     final validatedUrl = UrlValidator.validate(rawUrl);
 
+    final ffmpegDir = engineService?.getFfmpegDirectory();
     final arguments = [
       '--dump-single-json',
       '--flat-playlist',
       '--no-warnings',
       '--skip-download',
+      if (ffmpegDir != null && ffmpegDir.isNotEmpty) ...[
+        '--ffmpeg-location',
+        ffmpegDir,
+      ],
       validatedUrl,
     ];
 
@@ -107,11 +112,16 @@ class YtDlpService {
   Future<VideoInfo> fetchVideoInfo(String rawUrl) async {
     final validatedUrl = UrlValidator.validate(rawUrl);
 
+    final ffmpegDir = engineService?.getFfmpegDirectory();
     final arguments = [
       '--dump-single-json',
       '--no-warnings',
       '--no-playlist',
       '--skip-download',
+      if (ffmpegDir != null && ffmpegDir.isNotEmpty) ...[
+        '--ffmpeg-location',
+        ffmpegDir,
+      ],
       validatedUrl,
     ];
 

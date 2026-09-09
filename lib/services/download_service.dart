@@ -80,10 +80,16 @@ class DownloadService {
     _currentTask = task;
     onProgress(task);
 
+    final ffmpegDir = engineService?.getFfmpegDirectory();
+
     final arguments = [
       '--newline',
       '--progress-template',
       'download:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s',
+      if (ffmpegDir != null && ffmpegDir.isNotEmpty) ...[
+        '--ffmpeg-location',
+        ffmpegDir,
+      ],
       // Allow yt-dlp to fetch the JS challenge solver (needed for YouTube
       // n-challenge / bot detection) and enable the local JS runtime.
       '--remote-components',

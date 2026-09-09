@@ -442,9 +442,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
               // Engine Subsystem (yt-dlp & FFmpeg) Manager Pill
               Tooltip(
-                message: dlCtrl.engineInfo?.isYtdlpReady == true
-                    ? 'Engine: yt-dlp ${dlCtrl.engineInfo?.ytdlpVersion ?? ""} (${dlCtrl.engineInfo?.sourceLabel}) · Click to manage'
-                    : 'Engine: yt-dlp MISSING · Click to download and install',
+                message: dlCtrl.isEngineUpdating
+                    ? 'Installing packages: ${dlCtrl.engineUpdateMessage}'
+                    : (dlCtrl.engineInfo?.isReady == true
+                        ? 'Packages: yt-dlp ${dlCtrl.engineInfo?.ytdlpVersion ?? ""} & FFmpeg ${dlCtrl.engineInfo?.ffmpegVersion ?? ""} · Click to manage'
+                        : 'Required engine packages incomplete · Click to manage'),
                 child: InkWell(
                   key: const ValueKey('faceplate_engine_button'),
                   onTap: () => EngineManagerDialog.show(
@@ -460,26 +462,41 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: bgWell,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: dlCtrl.engineInfo?.isYtdlpReady == false
-                            ? (isDark ? Colors.redAccent : Colors.red)
-                            : borderColor,
+                        color: dlCtrl.isEngineUpdating
+                            ? (isDark ? Colors.white70 : Colors.black87)
+                            : (dlCtrl.engineInfo?.isReady == false
+                                ? (isDark ? Colors.amberAccent : Colors.orange)
+                                : borderColor),
                         width: 1,
                       ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          margin: const EdgeInsets.only(right: 5),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: dlCtrl.engineInfo?.isYtdlpReady == true
-                                ? (isDark ? const Color(0xFFCCCCCC) : const Color(0xFF333333))
-                                : (isDark ? Colors.redAccent : Colors.red),
+                        if (dlCtrl.isEngineUpdating)
+                          Container(
+                            width: 8,
+                            height: 8,
+                            margin: const EdgeInsets.only(right: 6),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                isDark ? Colors.white : Colors.black,
+                              ),
+                            ),
+                          )
+                        else
+                          Container(
+                            width: 6,
+                            height: 6,
+                            margin: const EdgeInsets.only(right: 5),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: dlCtrl.engineInfo?.isReady == true
+                                  ? (isDark ? const Color(0xFFCCCCCC) : const Color(0xFF333333))
+                                  : (isDark ? Colors.amberAccent : Colors.orange),
+                            ),
                           ),
-                        ),
                         Icon(
                           Icons.precision_manufacturing_outlined,
                           size: 13,
@@ -488,14 +505,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(width: 4),
                         Text(
                           dlCtrl.isEngineUpdating
-                              ? 'UPDATING...'
-                              : (dlCtrl.engineInfo?.isYtdlpReady == true ? 'ENGINE' : 'INSTALL ENGINE'),
+                              ? 'INSTALLING PACKAGES...'
+                              : (dlCtrl.engineInfo?.isReady == true ? 'ENGINE READY' : 'PACKAGES'),
                           style: TextStyle(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w600,
-                            color: dlCtrl.engineInfo?.isYtdlpReady == false
-                                ? (isDark ? Colors.redAccent : Colors.red)
-                                : textHi,
+                            color: textHi,
                           ),
                         ),
                       ],
@@ -1206,23 +1221,97 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Engine Missing Warning Banner
-              if (dlCtrl.engineInfo != null && !dlCtrl.engineInfo!.isYtdlpReady) ...[
+              // Engine Package Status / Installing Packages Banner
+              if (dlCtrl.isEngineUpdating) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF161616) : const Color(0xFFF4F4F4),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF333333) : const Color(0xFFDDDDDD),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                isDark ? Colors.white : Colors.black,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Installing packages...',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: textHi,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '${(dlCtrl.engineUpdateProgress * 100).toStringAsFixed(0)}%',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.bold,
+                              color: textDim,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: dlCtrl.engineUpdateProgress > 0 ? dlCtrl.engineUpdateProgress : null,
+                          backgroundColor: borderColor,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            isDark ? Colors.white : Colors.black,
+                          ),
+                          minHeight: 4,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        dlCtrl.engineUpdateMessage.isNotEmpty
+                            ? dlCtrl.engineUpdateMessage
+                            : 'Setting up media extraction engines (yt-dlp & FFmpeg)...',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontFamily: 'monospace',
+                          color: textDim,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ] else if (dlCtrl.engineInfo != null && !dlCtrl.engineInfo!.isReady) ...[
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF221111) : const Color(0xFFFFF0F0),
+                    color: isDark ? const Color(0xFF221611) : const Color(0xFFFFF8F0),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: isDark ? const Color(0xFF882222) : const Color(0xFFEE8888),
+                      color: isDark ? const Color(0xFF663311) : const Color(0xFFEEAA66),
                     ),
                   ),
                   child: Row(
                     children: [
                       Icon(
-                        Icons.warning_amber_rounded,
+                        Icons.info_outline,
                         size: 20,
-                        color: isDark ? Colors.redAccent : Colors.red,
+                        color: isDark ? Colors.amberAccent : Colors.orange.shade800,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -1230,16 +1319,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'yt-dlp Core Engine Not Detected',
+                              'Required Engine Packages Incomplete',
                               style: TextStyle(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.redAccent : Colors.red.shade800,
+                                color: isDark ? Colors.amberAccent : Colors.orange.shade900,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'VINX requires yt-dlp to inspect links and extract media streams. You can download and install it into your local user vault with one click.',
+                              'VINX requires yt-dlp and FFmpeg to extract and merge video/audio streams.',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: isDark ? Colors.white70 : Colors.black87,
@@ -1251,17 +1340,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(width: 12),
                       ElevatedButton.icon(
                         key: const ValueKey('engine_missing_banner_install_btn'),
-                        onPressed: dlCtrl.isEngineUpdating
-                            ? null
-                            : () => EngineManagerDialog.show(
-                                  context,
-                                  downloadController: dlCtrl,
-                                  isDark: isDark,
-                                ),
+                        onPressed: () => dlCtrl.installRequiredPackages(),
                         icon: const Icon(Icons.download, size: 14),
-                        label: Text(
-                          dlCtrl.isEngineUpdating ? 'INSTALLING...' : 'INSTALL ENGINE',
-                          style: const TextStyle(
+                        label: const Text(
+                          'INSTALL PACKAGES',
+                          style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                           ),

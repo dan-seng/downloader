@@ -42,6 +42,22 @@ jobs:
       - name: Build Standalone Linux Executable
         run: flutter build linux --release
 
+      - name: Bundle Linux Engine Subsystem (yt-dlp & FFmpeg)
+        run: |
+          dest="build/linux/x64/release/bundle"
+          echo "Fetching official standalone yt-dlp..."
+          curl -L -o "$dest/yt-dlp" "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
+          chmod +x "$dest/yt-dlp"
+          echo "Fetching official static FFmpeg..."
+          curl -L -o "ffmpeg.tar.xz" "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
+          mkdir -p ffmpeg_extracted
+          tar -xf ffmpeg.tar.xz -C ffmpeg_extracted --strip-components 1
+          cp ffmpeg_extracted/ffmpeg "$dest/ffmpeg"
+          cp ffmpeg_extracted/ffprobe "$dest/ffprobe"
+          chmod +x "$dest/ffmpeg" "$dest/ffprobe"
+          rm -rf ffmpeg.tar.xz ffmpeg_extracted
+        shell: bash
+
       - name: Package Linux Release Tarball
         run: |
           cd build/linux/x64/release/bundle
@@ -76,6 +92,19 @@ jobs:
 
       - name: Build Standalone Windows .exe Bundle
         run: flutter build windows --release
+
+      - name: Bundle Windows Engine Subsystem (yt-dlp & FFmpeg)
+        run: |
+          $dest = "build\windows\x64\runner\Release"
+          Write-Host "Fetching official standalone yt-dlp.exe..."
+          Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile "$dest\yt-dlp.exe"
+          Write-Host "Fetching official standalone FFmpeg..."
+          Invoke-WebRequest -Uri "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -OutFile "ffmpeg.zip"
+          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg_extracted"
+          Get-ChildItem -Path "ffmpeg_extracted" -Recurse -Filter "ffmpeg.exe" | Move-Item -Destination "$dest\ffmpeg.exe" -Force
+          Get-ChildItem -Path "ffmpeg_extracted" -Recurse -Filter "ffprobe.exe" | Move-Item -Destination "$dest\ffprobe.exe" -Force
+          Remove-Item -Recurse -Force "ffmpeg.zip", "ffmpeg_extracted"
+        shell: pwsh
 
       - name: Package Windows Release Zip
         run: |
