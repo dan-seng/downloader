@@ -506,5 +506,65 @@ void main() {
       expect(ctrl.engineInfo?.ytdlpVersion, '2025.02.20');
       expect(ctrl.engineInfo?.ytdlpSource, EngineBinarySource.userBin);
     });
+
+    test('checkForEngineUpdates sets update state and allows banner dismissal', () async {
+      final tempDir = io.Directory.systemTemp.createTempSync('spidey_ctrl_update_');
+      addTearDown(() {
+        if (tempDir.existsSync()) {
+          tempDir.deleteSync(recursive: true);
+        }
+      });
+
+      final mockProcess = _MockControllerProcessService({
+        'yt-dlp --version': io.ProcessResult(1, 0, '2025.01.10\n', ''),
+        'ffmpeg -version': io.ProcessResult(2, 0, 'ffmpeg version 6.1\n', ''),
+        'chmod +x ${tempDir.path}/.spidey_dlx/bin/yt-dlp': io.ProcessResult(3, 0, '', ''),
+        '${tempDir.path}/.spidey_dlx/bin/yt-dlp --version': io.ProcessResult(4, 0, '2025.02.20\n', ''),
+      });
+      final engineService = EngineService(
+        processService: mockProcess,
+        customHomeDir: tempDir.path,
+        releaseFetcher: () async => '2025.02.20',
+        binaryDownloader: (uri, dest, {onProgress}) async {
+          dest.parent.createSync(recursive: true);
+          dest.writeAsStringSync('binary');
+        },
+      );
+      final ctrl = DownloadController(
+        downloadService: mockDownloadService,
+        storageService: mockStorageService,
+        archiveService: MockArchiveService(),
+        engineService: engineService,
+      );
+
+      await ctrl.checkEngine();
+      expect(ctrl.engineInfo?.isYtdlpReady, isTrue);
+      expect(ctrl.isYtDlpUpdateAvailable, isFalse);
+      expect(ctrl.shouldShowUpdateBanner, isFalse);
+
+      final latest = await ctrl.checkForEngineUpdates();
+      expect(latest, '2025.02.20');
+      expect(ctrl.latestAvailableYtDlpVersion, '2025.02.20');
+      expect(ctrl.isYtDlpUpdateAvailable, isTrue);
+      expect(ctrl.shouldShowUpdateBanner, isTrue);
+
+      // Dismiss banner
+      ctrl.dismissUpdateBanner();
+      expect(ctrl.isUpdateBannerDismissed, isTrue);
+      expect(ctrl.shouldShowUpdateBanner, isFalse);
+      expect(ctrl.isYtDlpUpdateAvailable, isTrue);
+
+      // Reset dismissal
+      ctrl.resetUpdateBannerDismissal();
+      expect(ctrl.shouldShowUpdateBanner, isTrue);
+
+      // Perform update
+      final updated = await ctrl.updateEngine();
+      expect(updated, isTrue);
+      expect(ctrl.latestAvailableYtDlpVersion, isNull);
+      expect(ctrl.isYtDlpUpdateAvailable, isFalse);
+      expect(ctrl.shouldShowUpdateBanner, isFalse);
+      expect(ctrl.isUpdateBannerDismissed, isFalse);
+    });
   });
 }

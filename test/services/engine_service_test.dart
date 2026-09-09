@@ -268,5 +268,44 @@ void main() {
       expect(info.isYtdlpReady, isTrue);
       expect(info.ffmpegAvailable, isTrue);
     });
+
+    group('Version Comparison & Update Detection', () {
+      test('isVersionNewer correctly compares date-based versions', () {
+        expect(EngineService.isVersionNewer('2025.03.01', '2025.02.19'), isTrue);
+        expect(EngineService.isVersionNewer('2025.02.19', '2025.02.19'), isFalse);
+        expect(EngineService.isVersionNewer('2024.12.31', '2025.01.01'), isFalse);
+        expect(EngineService.isVersionNewer('v2025.05.01', '2025.04.10'), isTrue);
+        expect(EngineService.isVersionNewer('2025.02.19.1', '2025.02.19'), isTrue);
+        expect(EngineService.isVersionNewer('2025.02.19', '2025.02.19.1'), isFalse);
+        expect(EngineService.isVersionNewer('2025.02.19', ''), isTrue);
+        expect(EngineService.isVersionNewer('', '2025.02.19'), isFalse);
+      });
+
+      test('fetchLatestYtDlpReleaseTag uses injected releaseFetcher', () async {
+        final service = EngineService(
+          customHomeDir: tempDir.path,
+          releaseFetcher: () async => '2025.04.15',
+        );
+
+        final tag = await service.fetchLatestYtDlpReleaseTag();
+        expect(tag, '2025.04.15');
+      });
+
+      test('checkForYtDlpUpdate returns newer tag when available', () async {
+        final service = EngineService(
+          customHomeDir: tempDir.path,
+          releaseFetcher: () async => '2025.04.15',
+        );
+
+        final update = await service.checkForYtDlpUpdate(currentVersion: '2025.02.01');
+        expect(update, '2025.04.15');
+
+        final upToDate = await service.checkForYtDlpUpdate(currentVersion: '2025.04.15');
+        expect(upToDate, isNull);
+
+        final newerCurrent = await service.checkForYtDlpUpdate(currentVersion: '2025.05.01');
+        expect(newerCurrent, isNull);
+      });
+    });
   });
 }

@@ -98,7 +98,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final text = _urlController.text.trim();
     if (text.isNotEmpty) {
       widget.downloadController.addLog('\$ spidey-fetch $text');
-      widget.videoController.analyzeUrl(text);
+      widget.videoController.analyzeUrl(text).then((_) {
+        if (widget.videoController.errorMessage != null) {
+          widget.downloadController.checkForEngineUpdates();
+        }
+      });
     }
   }
 
@@ -444,9 +448,11 @@ class _HomeScreenState extends State<HomeScreen> {
               Tooltip(
                 message: dlCtrl.isEngineUpdating
                     ? 'Installing packages: ${dlCtrl.engineUpdateMessage}'
-                    : (dlCtrl.engineInfo?.isReady == true
-                        ? 'Packages: yt-dlp ${dlCtrl.engineInfo?.ytdlpVersion ?? ""} & FFmpeg ${dlCtrl.engineInfo?.ffmpegVersion ?? ""} · Click to manage'
-                        : 'Required engine packages incomplete · Click to manage'),
+                    : (dlCtrl.isYtDlpUpdateAvailable
+                        ? 'Update available: yt-dlp ${dlCtrl.latestAvailableYtDlpVersion} (active: ${dlCtrl.engineInfo?.ytdlpVersion ?? ""}) · Click to view engine manager'
+                        : (dlCtrl.engineInfo?.isReady == true
+                            ? 'Packages: yt-dlp ${dlCtrl.engineInfo?.ytdlpVersion ?? ""} & FFmpeg ${dlCtrl.engineInfo?.ffmpegVersion ?? ""} · Click to manage'
+                            : 'Required engine packages incomplete · Click to manage')),
                 child: InkWell(
                   key: const ValueKey('faceplate_engine_button'),
                   onTap: () => EngineManagerDialog.show(
@@ -464,9 +470,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       border: Border.all(
                         color: dlCtrl.isEngineUpdating
                             ? (isDark ? Colors.white70 : Colors.black87)
-                            : (dlCtrl.engineInfo?.isReady == false
+                            : (dlCtrl.isYtDlpUpdateAvailable
                                 ? (isDark ? Colors.amberAccent : Colors.orange)
-                                : borderColor),
+                                : (dlCtrl.engineInfo?.isReady == false
+                                    ? (isDark ? Colors.amberAccent : Colors.orange)
+                                    : borderColor)),
                         width: 1,
                       ),
                     ),
@@ -492,25 +500,33 @@ class _HomeScreenState extends State<HomeScreen> {
                             margin: const EdgeInsets.only(right: 5),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: dlCtrl.engineInfo?.isReady == true
-                                  ? (isDark ? const Color(0xFFCCCCCC) : const Color(0xFF333333))
-                                  : (isDark ? Colors.amberAccent : Colors.orange),
+                              color: dlCtrl.isYtDlpUpdateAvailable
+                                  ? (isDark ? Colors.amberAccent : Colors.orange)
+                                  : (dlCtrl.engineInfo?.isReady == true
+                                      ? (isDark ? const Color(0xFFCCCCCC) : const Color(0xFF333333))
+                                      : (isDark ? Colors.amberAccent : Colors.orange)),
                             ),
                           ),
                         Icon(
                           Icons.precision_manufacturing_outlined,
                           size: 13,
-                          color: textHi,
+                          color: dlCtrl.isYtDlpUpdateAvailable && !dlCtrl.isEngineUpdating
+                              ? (isDark ? Colors.amberAccent : Colors.orange.shade800)
+                              : textHi,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           dlCtrl.isEngineUpdating
                               ? 'INSTALLING PACKAGES...'
-                              : (dlCtrl.engineInfo?.isReady == true ? 'ENGINE READY' : 'PACKAGES'),
+                              : (dlCtrl.isYtDlpUpdateAvailable
+                                  ? 'UPDATE AVAILABLE'
+                                  : (dlCtrl.engineInfo?.isReady == true ? 'ENGINE READY' : 'PACKAGES')),
                           style: TextStyle(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w600,
-                            color: textHi,
+                            color: dlCtrl.isYtDlpUpdateAvailable && !dlCtrl.isEngineUpdating
+                                ? (isDark ? Colors.amberAccent : Colors.orange.shade800)
+                                : textHi,
                           ),
                         ),
                       ],
@@ -1354,6 +1370,118 @@ class _HomeScreenState extends State<HomeScreen> {
                           foregroundColor: isDark ? Colors.black : Colors.white,
                           elevation: 0,
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ] else if (dlCtrl.shouldShowUpdateBanner) ...[
+                Container(
+                  key: const ValueKey('engine_update_available_banner'),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1C1811) : const Color(0xFFFFFDF5),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF6B4E1B) : const Color(0xFFE2C488),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isDark ? const Color(0xFF2C2214) : const Color(0xFFF7EBD0),
+                        ),
+                        child: Icon(
+                          Icons.system_update_alt_rounded,
+                          size: 20,
+                          color: isDark ? Colors.amberAccent : Colors.orange.shade900,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'ENGINE UPDATE AVAILABLE',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                    color: isDark ? Colors.amberAccent : Colors.orange.shade900,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: isDark ? const Color(0xFF382B17) : const Color(0xFFEBDAB3),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'v${dlCtrl.latestAvailableYtDlpVersion}',
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontFamily: 'monospace',
+                                      fontWeight: FontWeight.w700,
+                                      color: isDark ? Colors.white70 : Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'yt-dlp ${dlCtrl.latestAvailableYtDlpVersion} is available (active: ${dlCtrl.engineInfo?.ytdlpVersion ?? "unknown"}). Update to ensure uninterrupted downloads against site changes.',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: isDark ? Colors.white70 : const Color(0xFF444444),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      OutlinedButton(
+                        key: const ValueKey('engine_update_dismiss_btn'),
+                        onPressed: () => dlCtrl.dismissUpdateBanner(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: textDim,
+                          side: BorderSide(color: borderColor),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        child: const Text(
+                          'DISMISS',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        key: const ValueKey('engine_update_now_btn'),
+                        onPressed: () => dlCtrl.updateEngine(),
+                        icon: const Icon(Icons.download, size: 14),
+                        label: const Text(
+                          'UPDATE NOW',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isDark ? Colors.white : Colors.black,
+                          foregroundColor: isDark ? Colors.black : Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(6),
                           ),

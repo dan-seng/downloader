@@ -15,6 +15,7 @@ import 'package:video_downloader/models/download_archive_item.dart';
 import 'package:video_downloader/models/video_info.dart';
 import 'package:video_downloader/services/archive_service.dart';
 import 'package:video_downloader/services/download_service.dart';
+import 'package:video_downloader/services/engine_service.dart';
 import 'package:video_downloader/services/process_service.dart';
 import 'package:video_downloader/services/storage_service.dart';
 import 'package:video_downloader/services/ytdlp_service.dart';
@@ -95,11 +96,19 @@ class MockArchiveService extends ArchiveService {
   Future<void> saveItem(DownloadArchiveItem item) async {}
 }
 
-class _DummyProcessService implements ProcessService {
+typedef _DummyProcessService = _MockEngineProcessService;
+
+class _MockEngineProcessService implements ProcessService {
   @override
   Future<io.ProcessResult> run(String executable, List<String> arguments,
       {String? workingDirectory, Map<String, String>? environment}) async {
-    return io.ProcessResult(1, 0, '', '');
+    if (arguments.contains('--version')) {
+      return io.ProcessResult(1, 0, '2025.01.01\n', '');
+    }
+    if (arguments.contains('-version')) {
+      return io.ProcessResult(2, 0, 'ffmpeg version 6.1\n', '');
+    }
+    return io.ProcessResult(0, 0, '', '');
   }
 
   @override
@@ -302,5 +311,59 @@ void main() {
     // Verify Dark mode restored
     expect(themeModeNotifier.value, ThemeMode.dark);
     expect(find.byIcon(Icons.dark_mode_outlined), findsOneWidget);
+  });
+
+  testWidgets(
+      'Engine update banner displays when update is available and dismisses cleanly',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1280, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final mockYtDlp = MockYtDlpService();
+    final mockDownload = MockDownloadService();
+    final mockStorage = MockStorageService();
+    final mockEngineService = EngineService(
+      processService: _MockEngineProcessService(),
+      releaseFetcher: () async => '2025.03.15',
+    );
+
+    final videoController = VideoController(ytDlpService: mockYtDlp);
+    final downloadController = DownloadController(
+      downloadService: mockDownload,
+      storageService: mockStorage,
+      archiveService: MockArchiveService(),
+      engineService: mockEngineService,
+    );
+
+    await tester.pumpWidget(VideoDownloaderApp(
+      videoController: videoController,
+      downloadController: downloadController,
+    ));
+    await tester.pumpAndSettle();
+
+    // Check engine and updates
+    await downloadController.checkEngine();
+    await downloadController.checkForEngineUpdates();
+    await tester.pumpAndSettle();
+
+    // Verify banner is shown
+    expect(find.byKey(const ValueKey('engine_update_available_banner')), findsOneWidget);
+    expect(find.text('ENGINE UPDATE AVAILABLE'), findsOneWidget);
+    expect(find.text('v2025.03.15'), findsOneWidget);
+    expect(find.byKey(const ValueKey('engine_update_now_btn')), findsOneWidget);
+    expect(find.byKey(const ValueKey('engine_update_dismiss_btn')), findsOneWidget);
+
+    // Verify faceplate header pill indicates UPDATE AVAILABLE
+    expect(find.text('UPDATE AVAILABLE'), findsOneWidget);
+
+    // Tap dismiss
+    await tester.tap(find.byKey(const ValueKey('engine_update_dismiss_btn')));
+    await tester.pumpAndSettle();
+
+    // Banner is dismissed
+    expect(find.byKey(const ValueKey('engine_update_available_banner')), findsNothing);
+    // Header pill still shows UPDATE AVAILABLE
+    expect(find.text('UPDATE AVAILABLE'), findsOneWidget);
   });
 }

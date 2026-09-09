@@ -20,6 +20,7 @@ class EngineManagerDialog extends StatelessWidget {
     required DownloadController downloadController,
     required bool isDark,
   }) {
+    downloadController.checkForEngineUpdates();
     return showDialog<void>(
       context: context,
       barrierDismissible: !downloadController.isEngineUpdating,
@@ -168,22 +169,49 @@ class EngineManagerDialog extends StatelessWidget {
                             ),
                           ],
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFE8E8E8),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: borderColor),
-                          ),
-                          child: Text(
-                            isYtdlpReady ? ytdlpVersion : 'MISSING',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontFamily: 'monospace',
-                              fontWeight: FontWeight.w700,
-                              color: isYtdlpReady ? textHi : (isDark ? Colors.redAccent : Colors.red),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (downloadController.isYtDlpUpdateAvailable) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                margin: const EdgeInsets.only(right: 6),
+                                decoration: BoxDecoration(
+                                  color: isDark ? const Color(0xFF382B17) : const Color(0xFFF7EBD0),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: isDark ? const Color(0xFF6B4E1B) : const Color(0xFFE2C488),
+                                  ),
+                                ),
+                                child: Text(
+                                  'NEW: v${downloadController.latestAvailableYtDlpVersion}',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontFamily: 'monospace',
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark ? Colors.amberAccent : Colors.orange.shade900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFE8E8E8),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: borderColor),
+                              ),
+                              child: Text(
+                                isYtdlpReady ? ytdlpVersion : 'MISSING',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.w700,
+                                  color: isYtdlpReady ? textHi : (isDark ? Colors.redAccent : Colors.red),
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ],
                     ),
@@ -260,7 +288,9 @@ class EngineManagerDialog extends StatelessWidget {
                           label: Text(
                             isUpdating
                                 ? 'UPDATING...'
-                                : (isYtdlpReady ? 'UPDATE TO LATEST RELEASE' : 'DOWNLOAD & INSTALL yt-dlp'),
+                                : (downloadController.isYtDlpUpdateAvailable
+                                    ? 'UPDATE TO v${downloadController.latestAvailableYtDlpVersion}'
+                                    : (isYtdlpReady ? 'UPDATE TO LATEST RELEASE' : 'DOWNLOAD & INSTALL yt-dlp')),
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,

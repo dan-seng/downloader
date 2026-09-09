@@ -46,6 +46,8 @@ class DownloadController extends ChangeNotifier {
   bool _isEngineUpdating = false;
   double _engineUpdateProgress = 0.0;
   String _engineUpdateMessage = '';
+  String? _latestAvailableYtDlpVersion;
+  bool _updateBannerDismissed = false;
 
   DownloadController({
     DownloadService? downloadService,
@@ -85,6 +87,30 @@ class DownloadController extends ChangeNotifier {
   bool get isEngineUpdating => _isEngineUpdating;
   double get engineUpdateProgress => _engineUpdateProgress;
   String get engineUpdateMessage => _engineUpdateMessage;
+  String? get latestAvailableYtDlpVersion => _latestAvailableYtDlpVersion;
+  bool get isUpdateBannerDismissed => _updateBannerDismissed;
+
+  bool get isYtDlpUpdateAvailable =>
+      _latestAvailableYtDlpVersion != null &&
+      _engineInfo != null &&
+      _engineInfo!.isYtdlpReady &&
+      EngineService.isVersionNewer(
+        _latestAvailableYtDlpVersion!,
+        _engineInfo!.ytdlpVersion ?? '',
+      );
+
+  bool get shouldShowUpdateBanner =>
+      isYtDlpUpdateAvailable && !_updateBannerDismissed && !_isEngineUpdating;
+
+  void dismissUpdateBanner() {
+    _updateBannerDismissed = true;
+    notifyListeners();
+  }
+
+  void resetUpdateBannerDismissal() {
+    _updateBannerDismissed = false;
+    notifyListeners();
+  }
   List<DownloadArchiveItem> get archiveItems => List.unmodifiable(_archiveItems);
   String get archiveSearchQuery => _archiveSearchQuery;
   ArchiveFilter get archiveFilter => _archiveFilter;
@@ -385,7 +411,10 @@ class DownloadController extends ChangeNotifier {
   }
 
   /// Initializes the default download directory from system paths, loads archive, and verifies engine packages.
-  Future<void> initialize({bool autoInstallMissing = true}) async {
+  Future<void> initialize({
+    bool autoInstallMissing = true,
+    bool autoCheckUpdates = true,
+  }) async {
     if (_downloadDirectory.isEmpty) {
       _downloadDirectory = await _storageService.getDefaultDownloadsDirectory();
     }
@@ -394,7 +423,29 @@ class DownloadController extends ChangeNotifier {
     if (autoInstallMissing && _engineInfo != null && !_engineInfo!.isReady) {
       await installRequiredPackages();
     }
+    if (autoCheckUpdates && _engineInfo != null && _engineInfo!.isYtdlpReady) {
+      unawaited(checkForEngineUpdates());
+    }
     notifyListeners();
+  }
+
+  /// Checks whether a newer release of yt-dlp is available in the background.
+  Future<String?> checkForEngineUpdates() async {
+    if (_engineInfo == null || !_engineInfo!.isYtdlpReady) return null;
+    try {
+      final latest = await _engineService.checkForYtDlpUpdate(
+        currentVersion: _engineInfo!.ytdlpVersion,
+      );
+      if (latest != null) {
+        _latestAvailableYtDlpVersion = latest;
+        addLog('engine update detected: yt-dlp $latest (active: ${_engineInfo!.ytdlpVersion})');
+        notifyListeners();
+        return latest;
+      }
+    } catch (e) {
+      addLog('update check failed: $e');
+    }
+    return null;
   }
 
   /// Runs a discovery scan to check for yt-dlp and FFmpeg binaries across the hybrid hierarchy.
@@ -411,6 +462,15 @@ class DownloadController extends ChangeNotifier {
           addLog('engine verified: FFmpeg ${_engineInfo!.ffmpegVersion ?? ""} (${_engineInfo!.ffmpegSourceLabel})');
         } else {
           addLog('engine notice: FFmpeg not detected in user bin, bundle, or system PATH');
+        }
+
+        if (_latestAvailableYtDlpVersion != null) {
+          if (!EngineService.isVersionNewer(
+            _latestAvailableYtDlpVersion!,
+            _engineInfo!.ytdlpVersion ?? '',
+          )) {
+            _latestAvailableYtDlpVersion = null;
+          }
         }
       }
     } catch (e) {
@@ -441,6 +501,8 @@ class DownloadController extends ChangeNotifier {
           },
         );
         _engineInfo = info;
+        _latestAvailableYtDlpVersion = null;
+        _updateBannerDismissed = false;
       } else if (needsYtdlp) {
         final info = await _engineService.downloadOrUpdateYtDlp(
           onProgress: (progress, status) {
@@ -450,6 +512,8 @@ class DownloadController extends ChangeNotifier {
           },
         );
         _engineInfo = info;
+        _latestAvailableYtDlpVersion = null;
+        _updateBannerDismissed = false;
       } else if (needsFfmpeg) {
         final info = await _engineService.downloadOrUpdateFfmpeg(
           onProgress: (progress, status) {
@@ -492,6 +556,8 @@ class DownloadController extends ChangeNotifier {
         },
       );
       _engineInfo = info;
+      _latestAvailableYtDlpVersion = null;
+      _updateBannerDismissed = false;
       _engineUpdateMessage = 'Engine ready: yt-dlp ${info.ytdlpVersion ?? "installed"}';
       addLog('engine updated successfully: yt-dlp ${info.ytdlpVersion ?? ""} (${info.sourceLabel})');
       return true;

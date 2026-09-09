@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' as io;
 import 'package:archive/archive_io.dart';
 import 'process_service.dart';
@@ -79,12 +80,16 @@ typedef BinaryDownloader = Future<void> Function(
   void Function(double progress, String status)? onProgress,
 });
 
+/// Signature for querying the latest release tag from GitHub or mock provider.
+typedef ReleaseFetcher = Future<String?> Function();
+
 /// Service responsible for discovering, validating, and updating yt-dlp and FFmpeg binaries.
 class EngineService {
   final ProcessService _processService;
   final String? customHomeDir;
   final String? customBundleDir;
   final BinaryDownloader? binaryDownloader;
+  final ReleaseFetcher? releaseFetcher;
 
   EngineInfo? _cachedEngineInfo;
   EngineInfo? get cachedEngineInfo => _cachedEngineInfo;
@@ -94,6 +99,7 @@ class EngineService {
     this.customHomeDir,
     this.customBundleDir,
     this.binaryDownloader,
+    this.releaseFetcher,
   }) : _processService = processService ?? const SystemProcessService();
 
   /// Returns the yt-dlp executable name appropriate for the host OS.
@@ -527,5 +533,103 @@ class EngineService {
     } finally {
       client.close();
     }
+  }
+
+  /// Compares two version strings (typically date-based `YYYY.MM.DD[.patch]`).
+  /// Returns `true` if [latest] is strictly newer than [current].
+  static bool isVersionNewer(String latest, String current) {
+    final cleanLatest = latest.trim().replaceFirst(RegExp(r'^[vV]'), '');
+    final cleanCurrent = current.trim().replaceFirst(RegExp(r'^[vV]'), '');
+
+    if (cleanLatest.isEmpty) return false;
+    if (cleanCurrent.isEmpty) return true;
+
+    final latestParts = _parseVersionParts(cleanLatest);
+    final currentParts = _parseVersionParts(cleanCurrent);
+
+    if (latestParts.isEmpty) return false;
+    if (currentParts.isEmpty) return true;
+
+    final maxLen = latestParts.length > currentParts.length
+        ? latestParts.length
+        : currentParts.length;
+
+    for (var i = 0; i < maxLen; i++) {
+      final l = i < latestParts.length ? latestParts[i] : 0;
+      final c = i < currentParts.length ? currentParts[i] : 0;
+      if (l > c) return true;
+      if (l < c) return false;
+    }
+    return false;
+  }
+
+  static List<int> _parseVersionParts(String version) {
+    final parts = <int>[];
+    final matches = RegExp(r'\d+').allMatches(version);
+    for (final m in matches) {
+      final parsed = int.tryParse(m.group(0)!);
+      if (parsed != null) {
+        parts.add(parsed);
+      }
+    }
+    return parts;
+  }
+
+  /// Default production implementation of querying the latest yt-dlp release from GitHub.
+  static Future<String?> _defaultReleaseFetcher() async {
+    final client = io.HttpClient();
+    client.connectionTimeout = const Duration(seconds: 6);
+    try {
+      final request = await client.getUrl(
+        Uri.parse('https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest'),
+      );
+      request.headers.set(io.HttpHeaders.userAgentHeader, 'VINX-Desktop-Downloader');
+      request.headers.set(io.HttpHeaders.acceptHeader, 'application/vnd.github.v3+json');
+      request.followRedirects = true;
+      request.maxRedirects = 3;
+
+      final response = await request.close().timeout(const Duration(seconds: 8));
+      if (response.statusCode != io.HttpStatus.ok) {
+        return null;
+      }
+
+      final body = await response.transform(utf8.decoder).join();
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        final tagName = decoded['tag_name'] as String?;
+        if (tagName != null && tagName.trim().isNotEmpty) {
+          final clean = tagName.trim();
+          return clean.replaceFirst(RegExp(r'^[vV]'), '');
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Fetches the latest yt-dlp release tag from GitHub.
+  Future<String?> fetchLatestYtDlpReleaseTag() async {
+    if (releaseFetcher != null) {
+      return await releaseFetcher!();
+    }
+    return await _defaultReleaseFetcher();
+  }
+
+  /// Checks whether a newer release of yt-dlp is available compared to [currentVersion] or active engine.
+  /// Returns the latest version string if an update is available, or null if up to date or check failed.
+  Future<String?> checkForYtDlpUpdate({String? currentVersion}) async {
+    final current = currentVersion ?? _cachedEngineInfo?.ytdlpVersion;
+    if (current == null || current.trim().isEmpty) return null;
+
+    final latest = await fetchLatestYtDlpReleaseTag();
+    if (latest == null || latest.trim().isEmpty) return null;
+
+    if (isVersionNewer(latest, current)) {
+      return latest;
+    }
+    return null;
   }
 }
