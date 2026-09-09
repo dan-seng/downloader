@@ -28,6 +28,22 @@ Designed with a high-contrast industrial monochrome aesthetic (`#FAF9F6` porcela
 
 ---
 
+## 🚀 Pre-Built Standalone Binaries (No Setup Required)
+
+If you just want to run the app without installing Flutter or building from source:
+
+1. Go to the [**Releases**](https://github.com/dan-seng/downloader/releases) page or download the latest automated build from [**GitHub Actions**](https://github.com/dan-seng/downloader/actions).
+2. **Windows (`.exe`)**:
+   - Download `SPIDEY_DLX-windows-x64.zip`.
+   - Extract the folder and double-click `video_downloader.exe`.
+3. **Linux**:
+   - Download `SPIDEY_DLX-linux-x64.tar.gz`.
+   - Extract and run `./video_downloader`.
+4. **First Launch**:
+   - If `yt-dlp` is not already installed on your system, click the **"INSTALL ENGINE"** button inside the app to automatically fetch the official standalone engine. No terminal required!
+
+---
+
 ## Prerequisites
 
 Before building or running the application, make sure the following system tools are installed on your system.

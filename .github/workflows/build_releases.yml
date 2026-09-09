@@ -1,0 +1,121 @@
+name: Build & Package Desktop Releases
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  # ==========================================
+  # Linux Desktop Release Build
+  # ==========================================
+  build-linux:
+    name: Build Linux Desktop (x64)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux Build Dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y clang cmake ninja-build pkg-config libgtk-3-dev libnotify-bin
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Run Static Analysis & Tests
+        run: |
+          flutter analyze
+          flutter test
+
+      - name: Build Standalone Linux Executable
+        run: flutter build linux --release
+
+      - name: Package Linux Release Tarball
+        run: |
+          cd build/linux/x64/release/bundle
+          tar -czvf ../../../../../SPIDEY_DLX-linux-x64.tar.gz *
+        shell: bash
+
+      - name: Upload Linux Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SPIDEY_DLX-linux-x64
+          path: SPIDEY_DLX-linux-x64.tar.gz
+
+  # ==========================================
+  # Windows Desktop Release (.exe) Build
+  # ==========================================
+  build-windows:
+    name: Build Windows Desktop (.exe x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Standalone Windows .exe Bundle
+        run: flutter build windows --release
+
+      - name: Package Windows Release Zip
+        run: |
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath SPIDEY_DLX-windows-x64.zip
+        shell: pwsh
+
+      - name: Upload Windows .exe Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SPIDEY_DLX-windows-x64
+          path: SPIDEY_DLX-windows-x64.zip
+
+  # ==========================================
+  # Publish to GitHub Releases (on tag push)
+  # ==========================================
+  publish-release:
+    name: Publish Release Assets
+    needs: [build-linux, build-windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SPIDEY_DLX-linux-x64
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SPIDEY_DLX-windows-x64
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            SPIDEY_DLX-linux-x64.tar.gz
+            SPIDEY_DLX-windows-x64.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
