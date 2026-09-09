@@ -15,6 +15,7 @@ import '../widgets/reel_spinner.dart';
 import '../widgets/terminal_log_console.dart';
 import '../widgets/web_corner_painter.dart';
 import '../../archive/presentation/archive_deck.dart';
+import '../widgets/engine_manager_dialog.dart';
 
 /// Active main panel view mode.
 enum HomeDeckView { deck, archive }
@@ -427,6 +428,70 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ],
+                ),
+              ),
+
+              // Engine Subsystem (yt-dlp & FFmpeg) Manager Pill
+              Tooltip(
+                message: dlCtrl.engineInfo?.isYtdlpReady == true
+                    ? 'Engine: yt-dlp ${dlCtrl.engineInfo?.ytdlpVersion ?? ""} (${dlCtrl.engineInfo?.sourceLabel}) · Click to manage'
+                    : 'Engine: yt-dlp MISSING · Click to download and install',
+                child: InkWell(
+                  key: const ValueKey('faceplate_engine_button'),
+                  onTap: () => EngineManagerDialog.show(
+                    context,
+                    downloadController: dlCtrl,
+                    isDark: isDark,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: bgWell,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: dlCtrl.engineInfo?.isYtdlpReady == false
+                            ? (isDark ? Colors.redAccent : Colors.red)
+                            : borderColor,
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          margin: const EdgeInsets.only(right: 5),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: dlCtrl.engineInfo?.isYtdlpReady == true
+                                ? (isDark ? const Color(0xFFCCCCCC) : const Color(0xFF333333))
+                                : (isDark ? Colors.redAccent : Colors.red),
+                          ),
+                        ),
+                        Icon(
+                          Icons.precision_manufacturing_outlined,
+                          size: 13,
+                          color: textHi,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          dlCtrl.isEngineUpdating
+                              ? 'UPDATING...'
+                              : (dlCtrl.engineInfo?.isYtdlpReady == true ? 'ENGINE' : 'INSTALL ENGINE'),
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: dlCtrl.engineInfo?.isYtdlpReady == false
+                                ? (isDark ? Colors.redAccent : Colors.red)
+                                : textHi,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
 
@@ -1132,6 +1197,82 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Engine Missing Warning Banner
+              if (dlCtrl.engineInfo != null && !dlCtrl.engineInfo!.isYtdlpReady) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF221111) : const Color(0xFFFFF0F0),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF882222) : const Color(0xFFEE8888),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 20,
+                        color: isDark ? Colors.redAccent : Colors.red,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'yt-dlp Core Engine Not Detected',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.redAccent : Colors.red.shade800,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'SPIDEY_DLX requires yt-dlp to inspect links and extract media streams. You can download and install it into your local user vault with one click.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isDark ? Colors.white70 : Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        key: const ValueKey('engine_missing_banner_install_btn'),
+                        onPressed: dlCtrl.isEngineUpdating
+                            ? null
+                            : () => EngineManagerDialog.show(
+                                  context,
+                                  downloadController: dlCtrl,
+                                  isDark: isDark,
+                                ),
+                        icon: const Icon(Icons.download, size: 14),
+                        label: Text(
+                          dlCtrl.isEngineUpdating ? 'INSTALLING...' : 'INSTALL ENGINE',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isDark ? Colors.white : Colors.black,
+                          foregroundColor: isDark ? Colors.black : Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
               // URL Row
               _buildUrlRow(context, isDark, videoCtrl),
               const SizedBox(height: 16),

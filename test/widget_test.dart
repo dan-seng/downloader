@@ -282,7 +282,9 @@ void main() {
     expect(find.byIcon(Icons.dark_mode_outlined), findsOneWidget);
     expect(find.byTooltip('Switch to Light mode'), findsOneWidget);
 
-    // Tap the switch to change to Light Mode
+    // Ensure visible and tap the switch to change to Light Mode
+    await tester.ensureVisible(find.byTooltip('Switch to Light mode'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Switch to Light mode'));
     await tester.pumpAndSettle();
 
@@ -291,7 +293,9 @@ void main() {
     expect(find.byIcon(Icons.light_mode_outlined), findsOneWidget);
     expect(find.byTooltip('Switch to Dark mode'), findsOneWidget);
 
-    // Tap again to switch back to Dark Mode
+    // Ensure visible and tap again to switch back to Dark Mode
+    await tester.ensureVisible(find.byTooltip('Switch to Dark mode'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Switch to Dark mode'));
     await tester.pumpAndSettle();
 

@@ -4,6 +4,7 @@ import 'controllers/video_controller.dart';
 import 'core/theme/app_theme.dart';
 import 'features/home/presentation/home_screen.dart';
 import 'services/download_service.dart';
+import 'services/engine_service.dart';
 import 'services/process_service.dart';
 import 'services/storage_service.dart';
 import 'services/ytdlp_service.dart';
@@ -13,8 +14,15 @@ void main() {
 
   // Initialize infrastructure and services
   const processService = SystemProcessService();
-  final ytDlpService = YtDlpService(processService: processService);
-  final downloadService = DownloadService(processService: processService);
+  final engineService = EngineService(processService: processService);
+  final ytDlpService = YtDlpService(
+    processService: processService,
+    engineService: engineService,
+  );
+  final downloadService = DownloadService(
+    processService: processService,
+    engineService: engineService,
+  );
   const storageService = StorageService();
 
   // Initialize business controllers
@@ -22,6 +30,7 @@ void main() {
   final downloadController = DownloadController(
     downloadService: downloadService,
     storageService: storageService,
+    engineService: engineService,
   );
 
   final themeModeNotifier = ValueNotifier<ThemeMode>(ThemeMode.system);
