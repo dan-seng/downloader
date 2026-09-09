@@ -8,6 +8,7 @@ import '../models/quality_option.dart';
 import '../models/speed_limit.dart';
 import '../models/time_range_clip.dart';
 import '../models/video_info.dart';
+import 'engine_service.dart';
 import 'process_service.dart';
 
 typedef DownloadProgressCallback = void Function(DownloadTask task);
@@ -18,6 +19,7 @@ typedef DownloadLogCallback = void Function(String line);
 class DownloadService {
   final ProcessService _processService;
   final String? executableOverride;
+  final EngineService? engineService;
 
   io.Process? _activeProcess;
   DownloadTask? _currentTask;
@@ -26,12 +28,17 @@ class DownloadService {
   DownloadService({
     ProcessService? processService,
     this.executableOverride,
+    this.engineService,
   }) : _processService = processService ?? const SystemProcessService();
 
   String get executablePath {
     final override = executableOverride;
     if (override != null && override.isNotEmpty) {
       return override;
+    }
+    final resolved = engineService?.cachedEngineInfo?.ytdlpPath;
+    if (resolved != null && resolved.isNotEmpty) {
+      return resolved;
     }
     return io.Platform.isWindows ? 'yt-dlp.exe' : 'yt-dlp';
   }

@@ -4,25 +4,32 @@ import '../core/errors/app_exceptions.dart';
 import '../core/utils/url_validator.dart';
 import '../models/playlist_info.dart';
 import '../models/video_info.dart';
+import 'engine_service.dart';
 import 'process_service.dart';
 
 /// Service responsible for invoking `yt-dlp` and parsing media metadata.
 class YtDlpService {
   final ProcessService _processService;
   final String? executableOverride;
+  final EngineService? engineService;
 
   YtDlpService({
     ProcessService? processService,
     this.executableOverride,
+    this.engineService,
   }) : _processService = processService ?? const SystemProcessService();
 
   /// Resolves the yt-dlp executable command/path.
   ///
-  /// Can be overridden for production bundled binaries or custom setups.
+  /// Priority: explicit override -> engineService cached path -> OS default.
   String get executablePath {
     final override = executableOverride;
     if (override != null && override.isNotEmpty) {
       return override;
+    }
+    final resolved = engineService?.cachedEngineInfo?.ytdlpPath;
+    if (resolved != null && resolved.isNotEmpty) {
+      return resolved;
     }
     // Default to PATH executable based on platform
     return io.Platform.isWindows ? 'yt-dlp.exe' : 'yt-dlp';
