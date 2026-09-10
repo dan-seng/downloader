@@ -1,16 +1,16 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#070709" />
-  <meta name="color-scheme" content="dark" />
+  <meta name="color-scheme" content="dark light" />
 
   <title>VINX - The Minimalist 4K Video Downloader for Desktop</title>
   <meta name="description" content="Save 4K & 8K video, master audiophile tracks, and archive playlists. 100% private, local-first, powered by yt-dlp and FFmpeg." />
   <meta name="application-name" content="VINX" />
   <meta name="author" content="VINX" />
-  <meta name="keywords" content="VINX, Video Downloader, yt-dlp, FFmpeg, 4K Video Downloader, YouTube Downloader, FLAC, MP3 320kbps, Open Source Downloader" />
+  <meta name="keywords" content="VINX, Video Downloader, yt-dlp, FFmpeg, 4K Video Downloader, YouTube Downloader, FLAC, MP3 320kbps, Linux Downloader, Windows Downloader" />
   
   <!-- Open Graph / Social Media -->
   <meta property="og:title" content="VINX - The Minimalist 4K Video Downloader for Desktop" />
@@ -40,13 +40,30 @@
         <img src="icon.png" alt="VINX" class="logo-icon" />
         <span>VINX</span>
       </a>
-      <a href="https://github.com/dan-seng/downloader/releases" target="_blank" rel="noopener noreferrer" class="nav-link">
-        <span>Releases</span>
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M7 7h10v10"></path>
-          <path d="M7 17 17 7"></path>
-        </svg>
-      </a>
+      <div class="header-actions">
+        <!-- Theme Toggle Button (Light/Dark Mode) -->
+        <button id="theme-toggle-btn" class="theme-toggle-btn" type="button" aria-label="Switch to Light Mode" title="Switch to Light Mode">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2"></path>
+            <path d="M12 20v2"></path>
+            <path d="m4.93 4.93 1.41 1.41"></path>
+            <path d="m17.66 17.66 1.41 1.41"></path>
+            <path d="M2 12h2"></path>
+            <path d="M20 12h2"></path>
+            <path d="m6.34 17.66-1.41 1.41"></path>
+            <path d="m19.07 4.93-1.41 1.41"></path>
+          </svg>
+        </button>
+
+        <a href="https://github.com/dan-seng/downloader/releases" target="_blank" rel="noopener noreferrer" class="nav-link">
+          <span>Releases</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M7 7h10v10"></path>
+            <path d="M7 17 17 7"></path>
+          </svg>
+        </a>
+      </div>
     </div>
   </header>
 
@@ -61,25 +78,75 @@
         Save pristine 4K &amp; 8K video, transcode studio-grade FLAC/MP3 audio, and archive entire playlists. 100% private, local-first, powered by native yt-dlp &amp; FFmpeg.
       </p>
 
-      <!-- Primary Download CTA -->
+      <!-- Primary Download CTA with OS Icon -->
       <div class="cta-group">
         <a id="primary-download-btn" href="https://github.com/dan-seng/downloader/releases/latest" class="btn-primary">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 15V3"></path>
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <path d="m7 10 5 5 5-5"></path>
-          </svg>
+          <span class="btn-icon">
+            <!-- Windows Default Icon -->
+            <svg class="os-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"></path>
+            </svg>
+          </span>
           <span class="btn-text">Download Windows Setup (139 MB)</span>
         </a>
         <span id="meta-caption" class="meta-caption">v1.0.0 • Windows 10/11 &amp; Linux • Free &amp; Open Source</span>
       </div>
 
-      <!-- Quick Format Selection Pills -->
+      <!-- Quick Format Selection Pills with OS Icons -->
       <div class="format-pills">
-        <a href="#" class="pill-link active-pill" data-format="winExe">Windows Setup (.exe)</a>
-        <a href="#" class="pill-link" data-format="winZip">Windows Portable (.zip)</a>
-        <a href="#" class="pill-link" data-format="linuxDeb">Linux Debian (.deb)</a>
-        <a href="#" class="pill-link" data-format="linuxTar">Linux Standalone (.tar.gz)</a>
+        <a href="#" class="pill-link active-pill" data-format="winExe">
+          <svg class="os-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"></path>
+          </svg>
+          <span>Windows Setup (.exe)</span>
+        </a>
+
+        <a href="#" class="pill-link" data-format="winZip">
+          <svg class="os-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"></path>
+          </svg>
+          <span>Windows Portable (.zip)</span>
+        </a>
+
+        <a href="#" class="pill-link" data-format="linuxDeb">
+          <svg class="os-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12.003 2c-2.4 0-4.35 1.95-4.35 4.35 0 .58.11 1.14.33 1.65-.63.29-1.21.72-1.68 1.28-1.02 1.2-1.42 2.76-1.12 4.32.22 1.15.82 2.19 1.7 2.94-.03.22-.05.44-.05.66 0 2.65 2.3 4.8 5.17 4.8 2.87 0 5.17-2.15 5.17-4.8 0-.22-.02-.44-.05-.66.88-.75 1.48-1.79 1.7-2.94.3-1.56-.1-3.12-1.12-4.32-.47-.56-1.05-.99-1.68-1.28.22-.51.33-1.07.33-1.65 0-2.4-1.95-4.35-4.35-4.35zm0 1.5c1.58 0 2.85 1.27 2.85 2.85 0 .61-.19 1.18-.52 1.65h-4.66c-.33-.47-.52-1.04-.52-1.65 0-1.58 1.27-2.85 2.85-2.85zm-1.2 2.5a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5zm2.4 0a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5z"></path>
+          </svg>
+          <span>Linux Debian (.deb)</span>
+        </a>
+
+        <a href="#" class="pill-link" data-format="linuxTar">
+          <svg class="os-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12.003 2c-2.4 0-4.35 1.95-4.35 4.35 0 .58.11 1.14.33 1.65-.63.29-1.21.72-1.68 1.28-1.02 1.2-1.42 2.76-1.12 4.32.22 1.15.82 2.19 1.7 2.94-.03.22-.05.44-.05.66 0 2.65 2.3 4.8 5.17 4.8 2.87 0 5.17-2.15 5.17-4.8 0-.22-.02-.44-.05-.66.88-.75 1.48-1.79 1.7-2.94.3-1.56-.1-3.12-1.12-4.32-.47-.56-1.05-.99-1.68-1.28.22-.51.33-1.07.33-1.65 0-2.4-1.95-4.35-4.35-4.35zm0 1.5c1.58 0 2.85 1.27 2.85 2.85 0 .61-.19 1.18-.52 1.65h-4.66c-.33-.47-.52-1.04-.52-1.65 0-1.58 1.27-2.85 2.85-2.85zm-1.2 2.5a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5zm2.4 0a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5z"></path>
+          </svg>
+          <span>Linux Standalone (.tar.gz)</span>
+        </a>
+      </div>
+
+      <!-- Supported Linux Distributions Card -->
+      <div class="distro-box">
+        <div class="distro-header">
+          <span style="display: flex; align-items: center; gap: 0.35rem;">
+            <svg class="os-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12.003 2c-2.4 0-4.35 1.95-4.35 4.35 0 .58.11 1.14.33 1.65-.63.29-1.21.72-1.68 1.28-1.02 1.2-1.42 2.76-1.12 4.32.22 1.15.82 2.19 1.7 2.94-.03.22-.05.44-.05.66 0 2.65 2.3 4.8 5.17 4.8 2.87 0 5.17-2.15 5.17-4.8 0-.22-.02-.44-.05-.66.88-.75 1.48-1.79 1.7-2.94.3-1.56-.1-3.12-1.12-4.32-.47-.56-1.05-.99-1.68-1.28.22-.51.33-1.07.33-1.65 0-2.4-1.95-4.35-4.35-4.35zm0 1.5c1.58 0 2.85 1.27 2.85 2.85 0 .61-.19 1.18-.52 1.65h-4.66c-.33-.47-.52-1.04-.52-1.65 0-1.58 1.27-2.85 2.85-2.85zm-1.2 2.5a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5zm2.4 0a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5z"></path>
+            </svg>
+            SUPPORTED LINUX DISTRIBUTIONS
+          </span>
+          <span>x86_64 ARCHITECTURE</span>
+        </div>
+        <div class="distro-tags">
+          <span class="distro-chip">Ubuntu 20.04+</span>
+          <span class="distro-chip">Debian 11+</span>
+          <span class="distro-chip">Linux Mint</span>
+          <span class="distro-chip">Pop!_OS</span>
+          <span class="distro-chip">Fedora 36+</span>
+          <span class="distro-chip">Arch Linux</span>
+          <span class="distro-chip">Manjaro</span>
+          <span class="distro-chip">openSUSE</span>
+        </div>
+        <p class="distro-note">
+          Official <strong>.deb</strong> package integrates directly with your system desktop launcher. The <strong>.tar.gz</strong> standalone archive runs out-of-the-box on Arch, Fedora, openSUSE, and any glibc Linux distribution without installation.
+        </p>
       </div>
     </section>
 
@@ -455,7 +522,7 @@
           <div class="sim-media-card">
             <div class="sim-media-info">
               <div class="sim-media-thumb">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polygon points="5 3 19 12 5 21 5 3"></polygon>
                 </svg>
               </div>
@@ -485,7 +552,7 @@
       </div>
     </section>
 
-    <!-- Bottom CTA Section -->
+    <!-- Bottom CTA Section with OS Icon -->
     <section class="bottom-cta-section">
       <h2 class="bottom-cta-heading">Get VINX for Windows &amp; Linux</h2>
       <p class="hero-subtext">
@@ -493,11 +560,11 @@
       </p>
       <div class="cta-group">
         <a id="bottom-download-btn" href="https://github.com/dan-seng/downloader/releases/latest" class="btn-primary">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 15V3"></path>
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <path d="m7 10 5 5 5-5"></path>
-          </svg>
+          <span class="btn-icon">
+            <svg class="os-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"></path>
+            </svg>
+          </span>
           <span class="btn-text">Download Windows Setup (139 MB)</span>
         </a>
         <span id="bottom-meta-caption" class="meta-caption">v1.0.0 • Windows 10/11 x64 • Free</span>
