@@ -65,43 +65,7 @@ jobs:
         shell: bash
 
       - name: Package Linux Debian (.deb) Installer
-        run: |
-          mkdir -p deb_pkg/opt/vinx
-          mkdir -p deb_pkg/usr/bin
-          mkdir -p deb_pkg/usr/share/applications
-          mkdir -p deb_pkg/usr/share/icons/hicolor/256x256/apps
-          mkdir -p deb_pkg/DEBIAN
-
-          cp -r build/linux/x64/release/bundle/* deb_pkg/opt/vinx/
-          ln -s /opt/vinx/video_downloader deb_pkg/usr/bin/vinx
-
-          cat << 'EOF' > deb_pkg/usr/share/applications/vinx.desktop
-[Desktop Entry]
-Name=VINX
-Comment=Modern Desktop Video Downloader
-Exec=/opt/vinx/video_downloader
-Icon=vinx
-Terminal=false
-Type=Application
-Categories=AudioVideo;Audio;Video;Network;
-EOF
-
-          cp assets/icon.png deb_pkg/usr/share/icons/hicolor/256x256/apps/vinx.png
-
-          cat << 'EOF' > deb_pkg/DEBIAN/control
-Package: vinx
-Version: 1.0.0
-Section: utils
-Priority: optional
-Architecture: amd64
-Maintainer: VINX <support@vinx.app>
-Description: VINX - Modern Desktop Video Downloader
- Powerful cross-platform desktop video and audio downloader powered by yt-dlp and FFmpeg.
-EOF
-
-          dpkg-deb --build deb_pkg VINX-linux-amd64.deb
-          rm -rf deb_pkg
-        shell: bash
+        run: bash linux/packaging/package_deb.sh
 
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
