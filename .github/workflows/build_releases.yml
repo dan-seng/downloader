@@ -64,11 +64,52 @@ jobs:
           tar -czvf ../../../../../VINX-linux-x64.tar.gz *
         shell: bash
 
-      - name: Upload Linux Binary Artifact
+      - name: Package Linux Debian (.deb) Installer
+        run: |
+          mkdir -p deb_pkg/opt/vinx
+          mkdir -p deb_pkg/usr/bin
+          mkdir -p deb_pkg/usr/share/applications
+          mkdir -p deb_pkg/usr/share/icons/hicolor/256x256/apps
+          mkdir -p deb_pkg/DEBIAN
+
+          cp -r build/linux/x64/release/bundle/* deb_pkg/opt/vinx/
+          ln -s /opt/vinx/video_downloader deb_pkg/usr/bin/vinx
+
+          cat << 'EOF' > deb_pkg/usr/share/applications/vinx.desktop
+[Desktop Entry]
+Name=VINX
+Comment=Modern Desktop Video Downloader
+Exec=/opt/vinx/video_downloader
+Icon=vinx
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;Video;Network;
+EOF
+
+          cp assets/icon.png deb_pkg/usr/share/icons/hicolor/256x256/apps/vinx.png
+
+          cat << 'EOF' > deb_pkg/DEBIAN/control
+Package: vinx
+Version: 1.0.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: VINX <support@vinx.app>
+Description: VINX - Modern Desktop Video Downloader
+ Powerful cross-platform desktop video and audio downloader powered by yt-dlp and FFmpeg.
+EOF
+
+          dpkg-deb --build deb_pkg VINX-linux-amd64.deb
+          rm -rf deb_pkg
+        shell: bash
+
+      - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: VINX-linux-x64
-          path: VINX-linux-x64.tar.gz
+          path: |
+            VINX-linux-amd64.deb
+            VINX-linux-x64.tar.gz
 
   # ==========================================
   # Windows Desktop Release (.exe) Build
@@ -106,16 +147,36 @@ jobs:
           Remove-Item -Recurse -Force "ffmpeg.zip", "ffmpeg_extracted"
         shell: pwsh
 
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup -y
+        shell: pwsh
+
+      - name: Compile Windows Setup Installer (.exe)
+        run: |
+          if (Get-Command iscc -ErrorAction SilentlyContinue) {
+            iscc windows\installer\vinx_setup.iss
+          } elseif (Test-Path "C:\Program Files (x86)\Inno Setup 6\iscc.exe") {
+            & "C:\Program Files (x86)\Inno Setup 6\iscc.exe" windows\installer\vinx_setup.iss
+          } elseif (Test-Path "C:\Program Files\Inno Setup 6\iscc.exe") {
+            & "C:\Program Files\Inno Setup 6\iscc.exe" windows\installer\vinx_setup.iss
+          } else {
+            throw "Inno Setup compiler (iscc.exe) not found"
+          }
+        shell: pwsh
+
       - name: Package Windows Release Zip
         run: |
           Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath VINX-windows-x64.zip
         shell: pwsh
 
-      - name: Upload Windows .exe Artifact
+      - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: VINX-windows-x64
-          path: VINX-windows-x64.zip
+          path: |
+            VINX-windows-setup-x64.exe
+            VINX-windows-x64.zip
 
   # ==========================================
   # Publish to GitHub Releases (on tag push)
@@ -143,8 +204,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            VINX-linux-x64.tar.gz
+            VINX-windows-setup-x64.exe
             VINX-windows-x64.zip
+            VINX-linux-amd64.deb
+            VINX-linux-x64.tar.gz
           draft: false
           prerelease: false
           generate_release_notes: true
