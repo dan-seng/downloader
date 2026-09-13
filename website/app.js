@@ -13,6 +13,7 @@
   // SVG Icons
   const WINDOWS_ICON = `<svg class="os-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>`;
   const LINUX_ICON = `<svg class="os-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12.003 2c-2.4 0-4.35 1.95-4.35 4.35 0 .58.11 1.14.33 1.65-.63.29-1.21.72-1.68 1.28-1.02 1.2-1.42 2.76-1.12 4.32.22 1.15.82 2.19 1.7 2.94-.03.22-.05.44-.05.66 0 2.65 2.3 4.8 5.17 4.8 2.87 0 5.17-2.15 5.17-4.8 0-.22-.02-.44-.05-.66.88-.75 1.48-1.79 1.7-2.94.3-1.56-.1-3.12-1.12-4.32-.47-.56-1.05-.99-1.68-1.28.22-.51.33-1.07.33-1.65 0-2.4-1.95-4.35-4.35-4.35zm0 1.5c1.58 0 2.85 1.27 2.85 2.85 0 .61-.19 1.18-.52 1.65h-4.66c-.33-.47-.52-1.04-.52-1.65 0-1.58 1.27-2.85 2.85-2.85zm-1.2 2.5a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5zm2.4 0a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5z"/></svg>`;
+  const ANDROID_ICON = `<svg class="os-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993.0001.5511-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.413 13.8564 8 12 8s-3.5902.413-5.1368.9507L4.8409 5.4477a.416.416 0 00-.5676-.1521.416.416 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396"/></svg>`;
   
   const SUN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`;
   const MOON_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`;
@@ -23,6 +24,7 @@
     winZip: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download/VINX-windows-x64.zip`,
     linuxDeb: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download/VINX-linux-amd64.deb`,
     linuxTar: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download/VINX-linux-x64.tar.gz`,
+    androidApk: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download/VINX-android.apk`,
     releasesPage: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`
   };
 
@@ -33,7 +35,8 @@
       winExe: '139 MB',
       winZip: '142 MB',
       linuxDeb: '118 MB',
-      linuxTar: '124 MB'
+      linuxTar: '124 MB',
+      androidApk: '45 MB'
     }
   };
 
@@ -88,6 +91,9 @@
     const userAgent = window.navigator.userAgent.toLowerCase();
     const platform = (window.navigator.userAgentData?.platform || window.navigator.platform || '').toLowerCase();
 
+    if (userAgent.includes('android')) {
+      return 'android';
+    }
     if (platform.includes('win') || userAgent.includes('windows')) {
       return 'windows';
     }
@@ -126,7 +132,13 @@
     let iconSvg = WINDOWS_ICON;
 
     if (formatOverride) {
-      if (formatOverride === 'winExe') {
+      if (formatOverride === 'androidApk') {
+        targetUrl = releaseData.urls.androidApk;
+        label = `Download Android APK (${releaseData.sizes.androidApk})`;
+        meta = `${releaseData.tag} • Android 7.0+ (ARM64 & x86_64) • Direct Standalone APK`;
+        activeKey = 'androidApk';
+        iconSvg = ANDROID_ICON;
+      } else if (formatOverride === 'winExe') {
         targetUrl = releaseData.urls.winExe;
         label = `Download Windows Setup (${releaseData.sizes.winExe})`;
         meta = `${releaseData.tag} • Windows Installer (.exe) • 64-bit`;
@@ -152,7 +164,13 @@
         iconSvg = LINUX_ICON;
       }
     } else {
-      if (os === 'linux') {
+      if (os === 'android') {
+        targetUrl = releaseData.urls.androidApk;
+        label = `Download Android APK (${releaseData.sizes.androidApk})`;
+        meta = `${releaseData.tag} • Android 7.0+ • Direct Standalone APK`;
+        activeKey = 'androidApk';
+        iconSvg = ANDROID_ICON;
+      } else if (os === 'linux') {
         targetUrl = releaseData.urls.linuxDeb;
         label = `Download Linux Debian (${releaseData.sizes.linuxDeb})`;
         meta = `${releaseData.tag} • Ubuntu, Debian, Mint x64 • Free`;
@@ -222,7 +240,10 @@
           const downloadUrl = asset.browser_download_url;
           const size = formatBytes(asset.size);
 
-          if (name.includes('setup') && name.endsWith('.exe')) {
+          if (name.endsWith('.apk')) {
+            releaseData.urls.androidApk = downloadUrl;
+            if (size) releaseData.sizes.androidApk = size;
+          } else if (name.includes('setup') && name.endsWith('.exe')) {
             releaseData.urls.winExe = downloadUrl;
             if (size) releaseData.sizes.winExe = size;
           } else if (name.includes('windows') && name.endsWith('.zip')) {

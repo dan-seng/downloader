@@ -43,3 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+.kotlin/
+*.apk
+*.deb
+*.tar.gz
+*.zip
+*.exe

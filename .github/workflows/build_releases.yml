@@ -143,11 +143,48 @@ jobs:
             VINX-windows-x64.zip
 
   # ==========================================
+  # Android Mobile Release (.apk) Build
+  # ==========================================
+  build-android:
+    name: Build Android Mobile (APK)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Android Release APK
+        run: |
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk VINX-android.apk
+
+      - name: Upload Android Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: VINX-android
+          path: VINX-android.apk
+
+  # ==========================================
   # Publish to GitHub Releases (on tag push)
   # ==========================================
   publish-release:
     name: Publish Release Assets
-    needs: [build-linux, build-windows]
+    needs: [build-linux, build-windows, build-android]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -164,6 +201,11 @@ jobs:
         with:
           name: VINX-windows-x64
 
+      - name: Download Android Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: VINX-android
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -172,6 +214,7 @@ jobs:
             VINX-windows-x64.zip
             VINX-linux-amd64.deb
             VINX-linux-x64.tar.gz
+            VINX-android.apk
           draft: false
           prerelease: false
           generate_release_notes: true
