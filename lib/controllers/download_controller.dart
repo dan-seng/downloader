@@ -130,6 +130,23 @@ class DownloadController extends ChangeNotifier {
   int get batchCompletedCount =>
       _batchQueue.where((t) => t.status == DownloadStatus.completed).length;
 
+  /// Returns all currently running or queued tasks.
+  List<DownloadTask> get activeTasks {
+    if (_isBatchRunning) {
+      return _batchQueue
+          .where((t) =>
+              t.status == DownloadStatus.downloading ||
+              t.status == DownloadStatus.queued)
+          .toList();
+    }
+    if (_currentTask != null &&
+        (_currentTask!.status == DownloadStatus.downloading ||
+            _currentTask!.status == DownloadStatus.queued)) {
+      return [_currentTask!];
+    }
+    return const [];
+  }
+
   /// Sets bandwidth speed throttling limit.
   void setSpeedLimit(SpeedLimit limit) {
     _speedLimit = limit;

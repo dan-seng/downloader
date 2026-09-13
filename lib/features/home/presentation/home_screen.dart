@@ -18,7 +18,7 @@ import '../../archive/presentation/archive_deck.dart';
 import '../widgets/engine_manager_dialog.dart';
 
 /// Active main panel view mode.
-enum HomeDeckView { deck, archive }
+enum HomeDeckView { deck, queue, archive }
 
 /// VINX — High-Performance Desktop Media Grabber Deck.
 class HomeScreen extends StatefulWidget {
@@ -134,6 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   final videoCtrl = widget.videoController;
                   final dlCtrl = widget.downloadController;
                   final screenWidth = MediaQuery.of(context).size.width;
+                  final isMobile = screenWidth < 768 || io.Platform.isAndroid;
                   final sidebarWidth = screenWidth >= 1440
                       ? 300.0
                       : (screenWidth >= 1100 ? 270.0 : 250.0);
@@ -148,48 +149,51 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // Left: Queue Sidebar (responsive width, smooth slide animation)
-                            ClipRect(
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 250),
-                                curve: Curves.easeInOutCubic,
-                                width: _isSidebarVisible ? (sidebarWidth + 1) : 0,
-                                child: OverflowBox(
-                                  minWidth: sidebarWidth + 1,
-                                  maxWidth: sidebarWidth + 1,
-                                  alignment: Alignment.topLeft,
-                                  child: Row(
-                                    children: [
-                                      SizedBox(
-                                        width: sidebarWidth,
-                                        child: _buildQueueSidebar(context, isDark, videoCtrl, dlCtrl),
-                                      ),
-                                      VerticalDivider(
-                                        width: 1,
-                                        thickness: 1,
-                                        color: borderColor,
-                                      ),
-                                    ],
+                            // Left: Queue Sidebar (only in desktop row when not on mobile)
+                            if (!isMobile)
+                              ClipRect(
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeInOutCubic,
+                                  width: _isSidebarVisible ? (sidebarWidth + 1) : 0,
+                                  child: OverflowBox(
+                                    minWidth: sidebarWidth + 1,
+                                    maxWidth: sidebarWidth + 1,
+                                    alignment: Alignment.topLeft,
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: sidebarWidth,
+                                          child: _buildQueueSidebar(context, isDark, videoCtrl, dlCtrl),
+                                        ),
+                                        VerticalDivider(
+                                          width: 1,
+                                          thickness: 1,
+                                          color: borderColor,
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
 
-                            // Right: Main Deck Column (Deck or Archive Vault)
+                            // Main Deck Column (Deck, Queue, or Archive Vault)
                             Expanded(
                               child: _activeView == HomeDeckView.deck
                                   ? _buildMainDeck(context, isDark, videoCtrl, dlCtrl)
-                                  : ArchiveDeck(
-                                      downloadController: dlCtrl,
-                                      isDark: isDark,
-                                      onReDownload: (url) {
-                                        _urlController.text = url;
-                                        videoCtrl.analyzeUrl(url);
-                                        setState(() {
-                                          _activeView = HomeDeckView.deck;
-                                        });
-                                      },
-                                    ),
+                                  : (_activeView == HomeDeckView.queue
+                                      ? _buildQueueSidebar(context, isDark, videoCtrl, dlCtrl)
+                                      : ArchiveDeck(
+                                          downloadController: dlCtrl,
+                                          isDark: isDark,
+                                          onReDownload: (url) {
+                                            _urlController.text = url;
+                                            videoCtrl.analyzeUrl(url);
+                                            setState(() {
+                                              _activeView = HomeDeckView.deck;
+                                            });
+                                          },
+                                        )),
                             ),
                           ],
                         ),
@@ -243,6 +247,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final isBatch = dlCtrl.isBatchRunning;
     final isFetching = videoCtrl.isLoading;
     final isDone = dlCtrl.currentTask?.status == DownloadStatus.completed;
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 768 || io.Platform.isAndroid;
 
     // Determine status text and dot color
     String statusText = 'IDLE';
@@ -403,6 +410,44 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
+                    if (isMobile)
+                      InkWell(
+                        key: const ValueKey('view_tab_queue'),
+                        onTap: () => setState(() => _activeView = HomeDeckView.queue),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _activeView == HomeDeckView.queue
+                                ? (isDark ? Colors.white : Colors.black)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.hourglass_bottom,
+                                size: 13,
+                                color: _activeView == HomeDeckView.queue
+                                    ? (isDark ? Colors.black : Colors.white)
+                                    : textDim,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'QUEUE (${dlCtrl.activeTasks.length})',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: _activeView == HomeDeckView.queue
+                                      ? (isDark ? Colors.black : Colors.white)
+                                      : textDim,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     InkWell(
                       key: const ValueKey('view_tab_archive'),
                       onTap: () => setState(() => _activeView = HomeDeckView.archive),
