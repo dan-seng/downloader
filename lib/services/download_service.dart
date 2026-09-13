@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
+import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt_exp;
 import '../core/errors/app_exceptions.dart';
 import '../models/audio_config.dart';
 import '../models/download_task.dart';
@@ -79,6 +80,18 @@ class DownloadService {
 
     _currentTask = task;
     onProgress(task);
+
+    if (io.Platform.isAndroid) {
+      await _startAndroidDownload(
+        video: video,
+        quality: quality,
+        destinationDirectory: destinationDirectory,
+        onProgress: onProgress,
+        onLog: onLog,
+        audioConfig: audioConfig,
+      );
+      return;
+    }
 
     final ffmpegDir = engineService?.getFfmpegDirectory();
 
@@ -322,5 +335,142 @@ class DownloadService {
         .replaceAll(RegExp(r'yt[-_]?dlp', caseSensitive: false), 'spidey_engine')
         .replaceAll(RegExp(r'\[youtube\]', caseSensitive: false), '[engine]')
         .trim();
+  }
+
+  /// Downloads video/audio directly on Android using the pure Dart engine.
+  Future<void> _startAndroidDownload({
+    required VideoInfo video,
+    required QualityOption quality,
+    required String destinationDirectory,
+    required DownloadProgressCallback onProgress,
+    DownloadLogCallback? onLog,
+    AudioConfig? audioConfig,
+  }) async {
+    final yt = yt_exp.YoutubeExplode();
+    try {
+      onLog?.call('\$ vinx-native-download --id ${video.id}');
+      onLog?.call('[Engine] Initializing mobile stream pipeline...');
+
+      final manifest = await yt.videos.streamsClient.getManifest(video.id);
+
+      yt_exp.StreamInfo? targetStream;
+      String fileExt = 'mp4';
+
+      if (audioConfig != null || quality.isAudioOnly) {
+        targetStream = manifest.audioOnly.withHighestBitrate();
+        fileExt = audioConfig?.format.id.toLowerCase() ?? quality.extension;
+        if (fileExt == 'mp3') fileExt = 'mp3';
+      } else {
+        final targetHeight = quality.height;
+        yt_exp.MuxedStreamInfo? matchedMuxed;
+        if (targetHeight != null) {
+          final muxedMatches = manifest.muxed.where(
+            (s) => s.videoResolution.height == targetHeight,
+          );
+          if (muxedMatches.isNotEmpty) {
+            matchedMuxed = muxedMatches.first;
+          }
+        }
+        if (matchedMuxed != null) {
+          targetStream = matchedMuxed;
+          fileExt = targetStream.container.name;
+        } else if (manifest.muxed.isNotEmpty) {
+          targetStream = manifest.muxed.withHighestBitrate();
+          fileExt = targetStream.container.name;
+        } else if (manifest.videoOnly.isNotEmpty) {
+          targetStream = manifest.videoOnly.withHighestBitrate();
+          fileExt = targetStream.container.name;
+        }
+      }
+
+      if (targetStream == null) {
+        throw const ProcessExecutionException('No compatible stream found for this video.');
+      }
+
+      // Ensure directory exists
+      final destDir = io.Directory(destinationDirectory);
+      if (!await destDir.exists()) {
+        await destDir.create(recursive: true);
+      }
+
+      final sanitizedTitle = video.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final targetFile = io.File('$destinationDirectory/$sanitizedTitle.$fileExt');
+
+      onLog?.call('[Engine] Destination: ${targetFile.path}');
+      onLog?.call('[Engine] Expected stream size: ${(targetStream.size.totalBytes / (1024 * 1024)).toStringAsFixed(1)} MB');
+
+      final totalBytes = targetStream.size.totalBytes;
+      var receivedBytes = 0;
+      final startTime = DateTime.now();
+
+      final stream = yt.videos.streamsClient.get(targetStream);
+      final output = targetFile.openWrite();
+
+      try {
+        await for (final chunk in stream) {
+          if (_cancelled) {
+            await output.close();
+            if (await targetFile.exists()) await targetFile.delete();
+            final task = _currentTask;
+            if (task != null) {
+              task.status = DownloadStatus.cancelled;
+              task.progress = 0.0;
+              onProgress(task);
+            }
+            onLog?.call('[Engine] Download cancelled by user.');
+            return;
+          }
+
+          output.add(chunk);
+          receivedBytes += chunk.length;
+
+          final elapsedSeconds = DateTime.now().difference(startTime).inMilliseconds / 1000.0;
+          final speedBytesPerSec = elapsedSeconds > 0 ? (receivedBytes / elapsedSeconds) : 0.0;
+          final progress = totalBytes > 0 ? (receivedBytes / totalBytes) : 0.0;
+
+          final remainingBytes = totalBytes - receivedBytes;
+          Duration? eta;
+          if (speedBytesPerSec > 0 && remainingBytes > 0) {
+            eta = Duration(seconds: (remainingBytes / speedBytesPerSec).round());
+          }
+
+          final task = _currentTask;
+          if (task != null) {
+            task.progress = progress.clamp(0.0, 1.0);
+            task.speed = speedBytesPerSec;
+            task.eta = eta;
+            task.destinationPath = targetFile.path;
+            onProgress(task);
+          }
+        }
+      } finally {
+        await output.flush();
+        await output.close();
+      }
+
+      final task = _currentTask;
+      if (task != null) {
+        task.status = DownloadStatus.completed;
+        task.progress = 1.0;
+        task.speed = 0.0;
+        task.eta = Duration.zero;
+        task.destinationPath = targetFile.path;
+        onProgress(task);
+      }
+      onLog?.call('[Engine] Download successfully finished!');
+    } catch (e) {
+      if (_cancelled) return;
+      final task = _currentTask;
+      if (task != null) {
+        task.status = DownloadStatus.failed;
+        task.errorMessage = e.toString();
+        onProgress(task);
+      }
+      onLog?.call('[Error] $e');
+      rethrow;
+    } finally {
+      yt.close();
+      _activeProcess = null;
+    }
   }
 }
