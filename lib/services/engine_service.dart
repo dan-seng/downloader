@@ -190,6 +190,20 @@ class EngineService {
   /// 2. Application Bundle candidates
   /// 3. System PATH
   Future<EngineInfo> checkEngine() async {
+    if (io.Platform.isAndroid) {
+      final info = const EngineInfo(
+        ytdlpPath: 'embedded-dart-engine',
+        ytdlpVersion: 'Mobile Native Engine (Dart)',
+        ytdlpSource: EngineBinarySource.bundled,
+        ffmpegPath: null,
+        ffmpegVersion: 'Direct Stream Muxing',
+        ffmpegSource: EngineBinarySource.bundled,
+        ffmpegAvailable: true,
+      );
+      _cachedEngineInfo = info;
+      return info;
+    }
+
     String? resolvedPath;
     String? resolvedVersion;
     EngineBinarySource resolvedSource = EngineBinarySource.missing;

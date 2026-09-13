@@ -19,7 +19,20 @@ class StorageService {
     }
 
     // Platform-specific environment fallbacks
-    if (io.Platform.isLinux) {
+    if (io.Platform.isAndroid) {
+      final androidDownload = io.Directory('/storage/emulated/0/Download/VINX');
+      try {
+        if (!await androidDownload.exists()) {
+          await androidDownload.create(recursive: true);
+        }
+        return androidDownload.path;
+      } catch (_) {
+        try {
+          final ext = await pp.getExternalStorageDirectory();
+          if (ext != null) return ext.path;
+        } catch (_) {}
+      }
+    } else if (io.Platform.isLinux) {
       final xdg = io.Platform.environment['XDG_DOWNLOAD_DIR'];
       if (xdg != null && xdg.isNotEmpty && await io.Directory(xdg).exists()) {
         return xdg;
@@ -100,6 +113,16 @@ class StorageService {
       final defaultDownloads = await getDefaultDownloadsDirectory();
       if (defaultDownloads.isNotEmpty) {
         dirs['Downloads'] = defaultDownloads;
+      }
+
+      if (io.Platform.isAndroid) {
+        try {
+          final movies = io.Directory('/storage/emulated/0/Movies');
+          if (await movies.exists()) dirs['Movies'] = movies.path;
+          final music = io.Directory('/storage/emulated/0/Music');
+          if (await music.exists()) dirs['Music'] = music.path;
+        } catch (_) {}
+        return dirs;
       }
 
       final home = io.Platform.environment['HOME'] ?? io.Platform.environment['USERPROFILE'] ?? '';

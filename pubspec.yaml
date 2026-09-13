@@ -37,6 +37,7 @@ dependencies:
   path_provider: ^2.1.5
   file_picker: ^12.2.0
   archive: ^4.2.0
+  youtube_explode_dart: ^2.3.0
 
 dev_dependencies:
   flutter_test:
