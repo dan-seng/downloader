@@ -1,6 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.intent.permission.INTERNET" />
+    <uses-permission android:name="android.intent.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.intent.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.intent.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.intent.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+
     <application
-        android:label="video_downloader"
+        android:label="VINX"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
