@@ -16,6 +16,7 @@ import '../widgets/terminal_log_console.dart';
 import '../widgets/web_corner_painter.dart';
 import '../../archive/presentation/archive_deck.dart';
 import '../widgets/engine_manager_dialog.dart';
+import 'mobile_main_screen.dart';
 
 /// Active main panel view mode.
 enum HomeDeckView { deck, queue, archive }
@@ -108,6 +109,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 768 || io.Platform.isAndroid;
+
+    if (isMobile) {
+      return MobileMainScreen(
+        videoController: widget.videoController,
+        downloadController: widget.downloadController,
+        themeModeNotifier: widget.themeModeNotifier,
+      );
+    }
+
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 

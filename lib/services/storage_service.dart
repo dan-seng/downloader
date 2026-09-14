@@ -20,18 +20,53 @@ class StorageService {
 
     // Platform-specific environment fallbacks
     if (io.Platform.isAndroid) {
-      final androidDownload = io.Directory('/storage/emulated/0/Download/VINX');
+      // 1. Try public Download folder if accessible and writable
       try {
-        if (!await androidDownload.exists()) {
-          await androidDownload.create(recursive: true);
+        final publicDownload = io.Directory('/storage/emulated/0/Download');
+        if (await publicDownload.exists()) {
+          final vinxDir = io.Directory('${publicDownload.path}/VINX');
+          if (!await vinxDir.exists()) {
+            await vinxDir.create(recursive: true);
+          }
+          // Quick probe to verify write permission
+          final probe = io.File('${vinxDir.path}/.write_test');
+          await probe.writeAsString('ok');
+          if (await probe.exists()) {
+            await probe.delete();
+            return vinxDir.path;
+          }
         }
-        return androidDownload.path;
       } catch (_) {
-        try {
-          final ext = await pp.getExternalStorageDirectory();
-          if (ext != null) return ext.path;
-        } catch (_) {}
+        // Scoped storage restricted; fall back to app external downloads
       }
+
+      // 2. Try app-specific external downloads directory (guaranteed read/write without permissions)
+      try {
+        final extDirs = await pp.getExternalStorageDirectories(type: pp.StorageDirectory.downloads);
+        if (extDirs != null && extDirs.isNotEmpty) {
+          final dir = extDirs.first;
+          if (!await dir.exists()) await dir.create(recursive: true);
+          return dir.path;
+        }
+      } catch (_) {}
+
+      // 3. Fallback to external storage root/Download
+      try {
+        final ext = await pp.getExternalStorageDirectory();
+        if (ext != null) {
+          final dir = io.Directory('${ext.path}/Download');
+          if (!await dir.exists()) await dir.create(recursive: true);
+          return dir.path;
+        }
+      } catch (_) {}
+
+      // 4. Fallback to app documents
+      try {
+        final docs = await pp.getApplicationDocumentsDirectory();
+        final dir = io.Directory('${docs.path}/Downloads');
+        if (!await dir.exists()) await dir.create(recursive: true);
+        return dir.path;
+      } catch (_) {}
     } else if (io.Platform.isLinux) {
       final xdg = io.Platform.environment['XDG_DOWNLOAD_DIR'];
       if (xdg != null && xdg.isNotEmpty && await io.Directory(xdg).exists()) {

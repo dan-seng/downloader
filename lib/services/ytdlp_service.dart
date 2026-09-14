@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io' as io;
-import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt_exp;
+import '../core/network/mobile_youtube_client.dart';
 import '../core/errors/app_exceptions.dart';
 import '../core/utils/url_validator.dart';
 import '../models/playlist_info.dart';
@@ -215,7 +215,7 @@ class YtDlpService {
 
   /// Extracts playlist metadata using the pure Dart youtube_explode_dart engine on Android.
   Future<PlaylistInfo> _fetchPlaylistFromExplode(String url) async {
-    final yt = yt_exp.YoutubeExplode();
+    final yt = createMobileYoutubeExplode();
     try {
       final playlist = await yt.playlists.get(url);
       final items = <PlaylistItem>[];
@@ -248,7 +248,7 @@ class YtDlpService {
 
   /// Extracts video metadata using the pure Dart youtube_explode_dart engine on Android.
   Future<VideoInfo> _fetchVideoFromExplode(String url) async {
-    final yt = yt_exp.YoutubeExplode();
+    final yt = createMobileYoutubeExplode();
     try {
       final video = await yt.videos.get(url);
       final manifest = await yt.videos.streamsClient.getManifest(video.id);

@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt_exp;
+import '../core/network/mobile_youtube_client.dart';
+import 'storage_service.dart';
+
 import '../core/errors/app_exceptions.dart';
 import '../models/audio_config.dart';
 import '../models/download_task.dart';
@@ -11,6 +14,15 @@ import '../models/time_range_clip.dart';
 import '../models/video_info.dart';
 import 'engine_service.dart';
 import 'process_service.dart';
+
+extension _IterableFirstWhereOrNull<T> on Iterable<T> {
+  T? firstWhereOrNull(bool Function(T element) test) {
+    for (final element in this) {
+      if (test(element)) return element;
+    }
+    return null;
+  }
+}
 
 typedef DownloadProgressCallback = void Function(DownloadTask task);
 typedef DownloadLogCallback = void Function(String line);
@@ -346,7 +358,7 @@ class DownloadService {
     DownloadLogCallback? onLog,
     AudioConfig? audioConfig,
   }) async {
-    final yt = yt_exp.YoutubeExplode();
+    final yt = createMobileYoutubeExplode();
     try {
       onLog?.call('\$ vinx-native-download --id ${video.id}');
       onLog?.call('[Engine] Initializing mobile stream pipeline...');
@@ -356,29 +368,27 @@ class DownloadService {
       yt_exp.StreamInfo? targetStream;
       String fileExt = 'mp4';
 
-      if (audioConfig != null || quality.isAudioOnly) {
-        targetStream = manifest.audioOnly.withHighestBitrate();
-        fileExt = audioConfig?.format.id.toLowerCase() ?? quality.extension;
-        if (fileExt == 'mp3') fileExt = 'mp3';
+      if (quality.isAudioOnly) {
+        final matchAudio = manifest.audioOnly.firstWhereOrNull((s) => s.tag.toString() == quality.id);
+        targetStream = matchAudio ?? manifest.audioOnly.withHighestBitrate();
+        fileExt = targetStream.container.name;
+        if (fileExt == 'mp4') fileExt = 'm4a';
       } else {
+        // Video mode: first prefer muxed streams (video + audio in one container)
         final targetHeight = quality.height;
-        yt_exp.MuxedStreamInfo? matchedMuxed;
         if (targetHeight != null) {
-          final muxedMatches = manifest.muxed.where(
+          targetStream = manifest.muxed.firstWhereOrNull(
             (s) => s.videoResolution.height == targetHeight,
           );
-          if (muxedMatches.isNotEmpty) {
-            matchedMuxed = muxedMatches.first;
-          }
         }
-        if (matchedMuxed != null) {
-          targetStream = matchedMuxed;
-          fileExt = targetStream.container.name;
-        } else if (manifest.muxed.isNotEmpty) {
-          targetStream = manifest.muxed.withHighestBitrate();
-          fileExt = targetStream.container.name;
-        } else if (manifest.videoOnly.isNotEmpty) {
-          targetStream = manifest.videoOnly.withHighestBitrate();
+        targetStream ??= manifest.muxed.firstWhereOrNull((s) => s.tag.toString() == quality.id);
+        // If not exact match, prefer highest muxed stream so the video has sound
+        targetStream ??= manifest.muxed.isNotEmpty ? manifest.muxed.withHighestBitrate() : null;
+        // Fallback to video-only if no muxed stream exists
+        targetStream ??= manifest.videoOnly.firstWhereOrNull((s) => s.tag.toString() == quality.id) ??
+            (manifest.videoOnly.isNotEmpty ? manifest.videoOnly.withHighestBitrate() : null);
+
+        if (targetStream != null) {
           fileExt = targetStream.container.name;
         }
       }
@@ -387,14 +397,27 @@ class DownloadService {
         throw const ProcessExecutionException('No compatible stream found for this video.');
       }
 
-      // Ensure directory exists
-      final destDir = io.Directory(destinationDirectory);
-      if (!await destDir.exists()) {
-        await destDir.create(recursive: true);
+      // Ensure destination directory is accessible and writable on Android
+      var activeDirectory = destinationDirectory;
+      var destDir = io.Directory(activeDirectory);
+      try {
+        if (!await destDir.exists()) {
+          await destDir.create(recursive: true);
+        }
+        final probe = io.File('${destDir.path}/.write_test');
+        await probe.writeAsString('ok');
+        await probe.delete();
+      } catch (e) {
+        onLog?.call('[Storage] Storage access restricted; resolving fallback directory...');
+        activeDirectory = await const StorageService().getDefaultDownloadsDirectory();
+        destDir = io.Directory(activeDirectory);
+        if (!await destDir.exists()) {
+          await destDir.create(recursive: true);
+        }
       }
 
       final sanitizedTitle = video.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-      final targetFile = io.File('$destinationDirectory/$sanitizedTitle.$fileExt');
+      final targetFile = io.File('$activeDirectory/$sanitizedTitle.$fileExt');
 
       onLog?.call('[Engine] Destination: ${targetFile.path}');
       onLog?.call('[Engine] Expected stream size: ${(targetStream.size.totalBytes / (1024 * 1024)).toStringAsFixed(1)} MB');
