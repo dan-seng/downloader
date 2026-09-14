@@ -49,11 +49,11 @@ jobs:
           curl -L -o "$dest/yt-dlp" "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
           chmod +x "$dest/yt-dlp"
           echo "Fetching official static FFmpeg..."
-          curl -L -o "ffmpeg.tar.xz" "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
+          curl -L -o "ffmpeg.tar.xz" "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
           mkdir -p ffmpeg_extracted
-          tar -xf ffmpeg.tar.xz -C ffmpeg_extracted --strip-components 1
-          cp ffmpeg_extracted/ffmpeg "$dest/ffmpeg"
-          cp ffmpeg_extracted/ffprobe "$dest/ffprobe"
+          tar -xf ffmpeg.tar.xz -C ffmpeg_extracted
+          find ffmpeg_extracted -type f -name "ffmpeg" -exec cp {} "$dest/ffmpeg" \;
+          find ffmpeg_extracted -type f -name "ffprobe" -exec cp {} "$dest/ffprobe" \;
           chmod +x "$dest/ffmpeg" "$dest/ffprobe"
           rm -rf ffmpeg.tar.xz ffmpeg_extracted
         shell: bash
