@@ -14,6 +14,16 @@ import '../services/download_service.dart';
 import '../services/engine_service.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
+import '../core/native/mobile_native_bridge.dart';
+
+extension _IterableFirstWhereOrNull<T> on Iterable<T> {
+  T? firstWhereOrNull(bool Function(T element) test) {
+    for (final element in this) {
+      if (test(element)) return element;
+    }
+    return null;
+  }
+}
 
 /// Controller managing quality selection, destination directories,
 /// live download tasks, desktop notifications, persistent library archives,
@@ -377,6 +387,29 @@ class DownloadController extends ChangeNotifier {
     }
     final parent = io.File(filePath).parent.path;
     await _storageService.openDirectory(parent);
+  }
+
+  /// Shares an archived file via the native share sheet.
+  Future<void> shareArchiveFile(String filePath) async {
+    await _storageService.shareFile(filePath);
+  }
+
+  /// Checks if storage permission is granted on Android.
+  Future<bool> checkStoragePermission() async {
+    return await MobileNativeBridge.checkStoragePermission();
+  }
+
+  /// Requests storage permission on Android and updates download directory to public Downloads/VINX.
+  Future<bool> requestStoragePermission() async {
+    final granted = await MobileNativeBridge.requestStoragePermission();
+    if (granted) {
+      final pubDir = await _storageService.getDefaultDownloadsDirectory();
+      if (pubDir.isNotEmpty) {
+        _downloadDirectory = pubDir;
+        notifyListeners();
+      }
+    }
+    return granted;
   }
 
   /// Records completed download into persistent archive and triggers OS notification.
@@ -760,6 +793,9 @@ class DownloadController extends ChangeNotifier {
               qualityId: _selectedQuality?.id,
             );
           } else if (task.status == DownloadStatus.failed) {
+            if (!_recentQueue.any((t) => t.id == task.id)) {
+              _recentQueue.insert(0, task);
+            }
             addLog('download failed: ${task.errorMessage ?? "unknown error"}');
           }
           notifyListeners();
@@ -770,9 +806,41 @@ class DownloadController extends ChangeNotifier {
       );
     } catch (e) {
       _errorMessage = e.toString();
+      final current = _currentTask;
+      if (current != null) {
+        current.status = DownloadStatus.failed;
+        current.errorMessage = _errorMessage;
+        if (!_recentQueue.any((t) => t.id == current.id)) {
+          _recentQueue.insert(0, current);
+        }
+      }
       addLog('error: $_errorMessage');
       notifyListeners();
     }
+  }
+
+  /// Retries a previously failed or cancelled download task.
+  Future<void> retryDownload(DownloadTask task) async {
+    if (isDownloading) return;
+    _recentQueue.removeWhere((t) => t.id == task.id);
+    _currentTask = null;
+    notifyListeners();
+
+    final video = VideoInfo(
+      id: task.id,
+      title: task.title,
+      formats: const [],
+      webpageUrl: task.url,
+    );
+
+    final matchingQuality = _availableQualities.firstWhereOrNull((q) => q.id == task.formatId) ??
+        (_availableQualities.isNotEmpty ? _availableQualities.first : null);
+
+    if (matchingQuality != null) {
+      _selectedQuality = matchingQuality;
+    }
+
+    await startDownload(video);
   }
 
   /// Sets the currently analyzed playlist and generates universal quality profiles.
