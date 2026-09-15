@@ -16,28 +16,31 @@ class MobileDownloadsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    return ListenableBuilder(
+      listenable: downloadController,
+      builder: (context, _) {
+        final theme = Theme.of(context);
+        final isDark = theme.brightness == Brightness.dark;
 
-    final bgPanel = isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel;
-    final bgRaised = isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised;
-    final borderColor = isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder;
-    final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
-    final textNorm = isDark ? SpideyColors.darkText : SpideyColors.lightText;
-    final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
-    final activeColor = isDark ? Colors.white : Colors.black;
+        final bgPanel = isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel;
+        final bgRaised = isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised;
+        final borderColor = isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder;
+        final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
+        final textNorm = isDark ? SpideyColors.darkText : SpideyColors.lightText;
+        final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
+        final activeColor = isDark ? Colors.white : Colors.black;
 
-    final dlCtrl = downloadController;
-    final isDownloading = dlCtrl.isDownloading;
-    final currentTask = dlCtrl.currentTask;
-    final activeTasks = dlCtrl.activeTasks;
-    final recentQueue = dlCtrl.recentQueue;
+        final dlCtrl = downloadController;
+        final isDownloading = dlCtrl.isDownloading;
+        final currentTask = dlCtrl.currentTask;
+        final activeTasks = dlCtrl.activeTasks;
+        final recentQueue = dlCtrl.recentQueue;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
           // Active Downloads Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -140,10 +143,12 @@ class MobileDownloadsTab extends StatelessWidget {
               },
             ),
           ],
-        ],
-      ),
-    );
-  }
+          ],
+        ),
+      );
+    },
+  );
+}
 
   Widget _buildActiveTaskCard(
     BuildContext context,
@@ -182,22 +187,24 @@ class MobileDownloadsTab extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: bgRaised,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: borderColor),
-                ),
-                child: Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      value: progress > 0 ? progress : null,
-                      strokeWidth: 2.5,
-                      valueColor: AlwaysStoppedAnimation<Color>(activeColor),
+              RepaintBoundary(
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: bgRaised,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        value: progress > 0 ? progress : null,
+                        strokeWidth: 2.5,
+                        valueColor: AlwaysStoppedAnimation<Color>(activeColor),
+                      ),
                     ),
                   ),
                 ),
@@ -237,14 +244,43 @@ class MobileDownloadsTab extends StatelessWidget {
 
           const SizedBox(height: 16),
 
+          // Transferred size & percentage row
+          if (task.formattedSizeProgress.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    task.formattedSizeProgress,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: textNorm,
+                    ),
+                  ),
+                  Text(
+                    '$percent%',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: textHi,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Progress Bar
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 8,
-              backgroundColor: bgRaised,
-              valueColor: AlwaysStoppedAnimation<Color>(activeColor),
+          RepaintBoundary(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: (progress > 0 || (task.totalBytes != null && task.totalBytes! > 0)) ? progress : null,
+                minHeight: 8,
+                backgroundColor: bgRaised,
+                valueColor: AlwaysStoppedAnimation<Color>(activeColor),
+              ),
             ),
           ),
 
@@ -268,14 +304,15 @@ class MobileDownloadsTab extends StatelessWidget {
                   ),
                 ],
               ),
-              Text(
-                '$percent%',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: textHi,
+              if (task.formattedSizeProgress.isEmpty)
+                Text(
+                  '$percent%',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: textHi,
+                  ),
                 ),
-              ),
               Row(
                 children: [
                   Icon(Icons.timer_outlined, size: 14, color: textDim),
@@ -331,7 +368,9 @@ class MobileDownloadsTab extends StatelessWidget {
       decoration: BoxDecoration(
         color: bgPanel,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor),
+        border: Border.all(
+          color: isFailed ? Colors.redAccent.withValues(alpha: 0.4) : borderColor,
+        ),
       ),
       child: Row(
         children: [
@@ -362,22 +401,46 @@ class MobileDownloadsTab extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   isCompleted
-                      ? 'Saved to device'
-                      : (isFailed ? (task.errorMessage ?? 'Download failed') : 'Cancelled'),
+                      ? (task.destinationPath != null
+                          ? 'Saved: ${task.destinationPath!.split('/').last}'
+                          : 'Saved to Downloads/VINX')
+                      : (isFailed ? (task.errorMessage ?? 'Download failed — tap to retry') : 'Cancelled'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 11,
-                    color: isCompleted ? Colors.green : textDim,
+                    color: isCompleted
+                        ? Colors.green
+                        : (isFailed ? Colors.redAccent : textDim),
                   ),
                 ),
               ],
             ),
           ),
-          if (isCompleted && task.destinationPath != null)
+          if (isFailed) ...[
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded, size: 20, color: Colors.blueAccent),
+              onPressed: () => dlCtrl.retryDownload(task),
+              tooltip: 'Retry Download',
+            ),
+          ],
+          if (isCompleted && task.destinationPath != null) ...[
+            IconButton(
+              icon: Icon(Icons.play_circle_fill_rounded, size: 22, color: textHi),
+              onPressed: () => dlCtrl.openArchiveFile(task.destinationPath!),
+              tooltip: 'Play / Open',
+            ),
             IconButton(
               icon: Icon(Icons.folder_open_rounded, size: 18, color: textHi),
               onPressed: () => dlCtrl.openArchiveFolder(task.destinationPath!),
               tooltip: 'Show in Files',
             ),
+            IconButton(
+              icon: Icon(Icons.share_rounded, size: 18, color: textDim),
+              onPressed: () => dlCtrl.shareArchiveFile(task.destinationPath!),
+              tooltip: 'Share',
+            ),
+          ],
         ],
       ),
     );
