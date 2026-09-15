@@ -250,8 +250,10 @@ class YtDlpService {
   Future<VideoInfo> _fetchVideoFromExplode(String url) async {
     final yt = createMobileYoutubeExplode();
     try {
-      final video = await yt.videos.get(url);
-      final manifest = await yt.videos.streamsClient.getManifest(video.id);
+      final video = await yt.videos.get(url).timeout(const Duration(seconds: 20));
+      final manifest = await yt.videos.streamsClient
+          .getManifest(video.id)
+          .timeout(const Duration(seconds: 20));
 
       final formats = <VideoFormat>[];
 
