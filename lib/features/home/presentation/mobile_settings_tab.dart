@@ -1,3 +1,4 @@
+import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import '../../../controllers/download_controller.dart';
 import '../../../core/theme/app_theme.dart';
@@ -16,77 +17,152 @@ class MobileSettingsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    return ListenableBuilder(
+      listenable: downloadController,
+      builder: (context, _) {
+        final theme = Theme.of(context);
+        final isDark = theme.brightness == Brightness.dark;
 
-    final bgPanel = isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel;
-    final bgRaised = isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised;
-    final borderColor = isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder;
-    final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
-    final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
-    final activeColor = isDark ? Colors.white : Colors.black;
+        final bgPanel = isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel;
+        final bgRaised = isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised;
+        final borderColor = isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder;
+        final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
+        final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
+        final activeColor = isDark ? Colors.white : Colors.black;
 
-    final dlCtrl = downloadController;
+        final dlCtrl = downloadController;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Settings & Preferences',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: textHi,
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Storage Location Section
-          _buildSectionCard(
-            context,
-            isDark,
-            title: 'Download Directory',
-            icon: Icons.folder_rounded,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  dlCtrl.downloadDirectory.isNotEmpty
-                      ? dlCtrl.downloadDirectory
-                      : '/storage/emulated/0/Download/VINX',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: textHi,
-                  ),
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Settings & Preferences',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: textHi,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Saved files appear in your phone Gallery and media players.',
-                  style: TextStyle(fontSize: 11.5, color: textDim),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () => dlCtrl.pickDirectory(),
-                  icon: const Icon(Icons.drive_file_move_outlined, size: 16),
-                  label: const Text('Change Location', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: textHi,
-                    side: BorderSide(color: borderColor),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+              ),
+              const SizedBox(height: 14),
+
+              // Storage Location Section
+              _buildSectionCard(
+                context,
+                isDark,
+                title: 'Download Directory',
+                icon: Icons.folder_rounded,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      dlCtrl.downloadDirectory.isNotEmpty
+                          ? dlCtrl.downloadDirectory
+                          : '/storage/emulated/0/Download/VINX',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: textHi,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Saved files appear in your phone Gallery and media players.',
+                      style: TextStyle(fontSize: 11.5, color: textDim),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () => dlCtrl.pickDirectory(),
+                      icon: const Icon(Icons.drive_file_move_outlined, size: 16),
+                      label: const Text('Change Location', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: textHi,
+                        side: BorderSide(color: borderColor),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                bgPanel: bgPanel,
+                borderColor: borderColor,
+                textHi: textHi,
+                activeColor: activeColor,
+              ),
+
+              // Storage Permissions Section (Android)
+              if (io.Platform.isAndroid) ...[
+                const SizedBox(height: 14),
+                FutureBuilder<bool>(
+                  future: dlCtrl.checkStoragePermission(),
+                  builder: (context, snapshot) {
+                    final isGranted = snapshot.data ?? false;
+
+                    return _buildSectionCard(
+                      context,
+                      isDark,
+                      title: 'Storage Permissions',
+                      icon: isGranted ? Icons.verified_user_rounded : Icons.security_rounded,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                isGranted ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
+                                size: 18,
+                                color: isGranted ? Colors.green : Colors.amber,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                isGranted ? 'Storage Access Granted' : 'Storage Permission Required',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: isGranted ? Colors.green : Colors.amber,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            isGranted
+                                ? 'VINX has permission to save directly to your public Downloads/VINX directory.'
+                                : 'Permission is needed so files can be saved to your public phone storage and indexed in Gallery.',
+                            style: TextStyle(fontSize: 11.5, color: textDim),
+                          ),
+                          if (!isGranted) ...[
+                            const SizedBox(height: 12),
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                final granted = await dlCtrl.requestStoragePermission();
+                                if (context.mounted && granted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('✓ Storage access granted!')),
+                                  );
+                                }
+                              },
+                              icon: const Icon(Icons.lock_open_rounded, size: 16),
+                              label: const Text('Grant Storage Access', style: TextStyle(fontWeight: FontWeight.bold)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: activeColor,
+                                foregroundColor: isDark ? Colors.black : Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      bgPanel: bgPanel,
+                      borderColor: borderColor,
+                      textHi: textHi,
+                      activeColor: activeColor,
+                    );
+                  },
                 ),
               ],
-            ),
-            bgPanel: bgPanel,
-            borderColor: borderColor,
-            textHi: textHi,
-            activeColor: activeColor,
-          ),
 
           const SizedBox(height: 14),
 
@@ -260,8 +336,10 @@ class MobileSettingsTab extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-        ],
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 

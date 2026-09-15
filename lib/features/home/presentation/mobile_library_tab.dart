@@ -37,26 +37,29 @@ class _MobileLibraryTabState extends State<MobileLibraryTab> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    return ListenableBuilder(
+      listenable: widget.downloadController,
+      builder: (context, _) {
+        final theme = Theme.of(context);
+        final isDark = theme.brightness == Brightness.dark;
 
-    final bgPanel = isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel;
-    final bgRaised = isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised;
-    final borderColor = isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder;
-    final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
-    final textNorm = isDark ? SpideyColors.darkText : SpideyColors.lightText;
-    final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
-    final activeColor = isDark ? Colors.white : Colors.black;
+        final bgPanel = isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel;
+        final bgRaised = isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised;
+        final borderColor = isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder;
+        final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
+        final textNorm = isDark ? SpideyColors.darkText : SpideyColors.lightText;
+        final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
+        final activeColor = isDark ? Colors.white : Colors.black;
 
-    final dlCtrl = widget.downloadController;
-    final items = dlCtrl.filteredArchiveItems;
-    final totalCount = dlCtrl.archiveItems.length;
+        final dlCtrl = widget.downloadController;
+        final items = dlCtrl.filteredArchiveItems;
+        final totalCount = dlCtrl.archiveItems.length;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
           // Header & Storage Info
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -161,10 +164,12 @@ class _MobileLibraryTabState extends State<MobileLibraryTab> {
             )
           else
             _buildEmptyLibraryState(context, isDark, textHi, textDim, bgPanel, bgRaised, borderColor),
-        ],
-      ),
-    );
-  }
+          ],
+        ),
+      );
+    },
+  );
+}
 
   Widget _buildFilterChip(
     ArchiveFilter filter,
@@ -310,6 +315,8 @@ class _MobileLibraryTabState extends State<MobileLibraryTab> {
                       dlCtrl.openArchiveFile(item.filePath);
                     } else if (action == 'folder') {
                       dlCtrl.openArchiveFolder(item.filePath);
+                    } else if (action == 'share') {
+                      dlCtrl.shareArchiveFile(item.filePath);
                     } else if (action == 'redownload') {
                       widget.onReDownload(item.url);
                     } else if (action == 'delete') {
@@ -334,6 +341,16 @@ class _MobileLibraryTabState extends State<MobileLibraryTab> {
                           Icon(Icons.folder_open_rounded, size: 18),
                           SizedBox(width: 10),
                           Text('Show in Files'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'share',
+                      child: Row(
+                        children: [
+                          Icon(Icons.share_rounded, size: 18),
+                          SizedBox(width: 10),
+                          Text('Share File'),
                         ],
                       ),
                     ),

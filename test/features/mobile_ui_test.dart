@@ -3,7 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:video_downloader/controllers/download_controller.dart';
 import 'package:video_downloader/controllers/video_controller.dart';
 import 'package:video_downloader/features/home/presentation/mobile_main_screen.dart';
+import 'package:video_downloader/models/audio_config.dart';
 import 'package:video_downloader/models/download_archive_item.dart';
+import 'package:video_downloader/models/quality_option.dart';
+import 'package:video_downloader/models/speed_limit.dart';
+import 'package:video_downloader/models/time_range_clip.dart';
 import 'package:video_downloader/models/video_format.dart';
 import 'package:video_downloader/models/video_info.dart';
 import 'package:video_downloader/services/archive_service.dart';
@@ -32,6 +36,26 @@ class MockYtDlpService extends YtDlpService {
   }
 }
 
+class MockDownloadService extends DownloadService {
+  QualityOption? lastQuality;
+  AudioConfig? lastAudioConfig;
+
+  @override
+  Future<void> startDownload({
+    required VideoInfo video,
+    required QualityOption quality,
+    required String destinationDirectory,
+    required DownloadProgressCallback onProgress,
+    DownloadLogCallback? onLog,
+    AudioConfig? audioConfig,
+    SpeedLimit? speedLimit,
+    TimeRangeClip? clip,
+  }) async {
+    lastQuality = quality;
+    lastAudioConfig = audioConfig;
+  }
+}
+
 class MockStorageService extends StorageService {
   @override
   Future<String> getDefaultDownloadsDirectory() async => '/fake/downloads';
@@ -52,12 +76,14 @@ void main() {
 
   late VideoController videoCtrl;
   late DownloadController dlCtrl;
+  late MockDownloadService downloadService;
   late ValueNotifier<ThemeMode> themeNotifier;
 
   setUp(() {
     videoCtrl = VideoController(ytDlpService: MockYtDlpService());
+    downloadService = MockDownloadService();
     dlCtrl = DownloadController(
-      downloadService: DownloadService(),
+      downloadService: downloadService,
       storageService: MockStorageService(),
       archiveService: MockArchiveService(),
     );
@@ -139,6 +165,34 @@ void main() {
       expect(find.byIcon(Icons.download_rounded), findsWidgets);
     });
 
+    testWidgets('restores video quality after switching audio back to video', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(400, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(createWidgetUnderTest());
+      await videoCtrl.analyzeUrl('https://youtube.com/watch?v=test123');
+      dlCtrl.setVideo(videoCtrl.currentVideo);
+      await tester.pumpAndSettle();
+      final originalQuality = dlCtrl.selectedQuality;
+
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Audio (MP3)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirm Selection'));
+      await tester.pumpAndSettle();
+      expect(dlCtrl.selectedQuality?.isAudioOnly, isTrue);
+
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Video (MP4)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirm Selection'));
+      await tester.pumpAndSettle();
+      expect(dlCtrl.selectedQuality?.id, originalQuality?.id);
+      expect(dlCtrl.selectedQuality?.isAudioOnly, isFalse);
+      expect(find.text('Format: Video'), findsOneWidget);
+    });
+
     testWidgets('opens format bottom sheet and switches between video and audio smoothly', (tester) async {
       await tester.binding.setSurfaceSize(const Size(400, 800));
       await tester.pumpWidget(createWidgetUnderTest());
@@ -149,7 +203,11 @@ void main() {
       await videoCtrl.analyzeUrl('https://youtube.com/watch?v=test123');
       await tester.pumpAndSettle();
 
-      // Tap Change to open format bottom sheet
+      final urlField = find.widgetWithText(TextField, 'Paste video link or playlist...');
+      await tester.showKeyboard(urlField);
+      await tester.pumpAndSettle();
+      expect(tester.testTextInput.isVisible, isTrue);
+
       await tester.tap(find.text('Change'));
       await tester.pumpAndSettle();
 
@@ -163,12 +221,35 @@ void main() {
 
       expect(find.text('MP3 · 320 kbps'), findsOneWidget);
       expect(find.text('M4A · AAC'), findsOneWidget);
+      expect(dlCtrl.selectedQuality?.isAudioOnly, isTrue);
+      await tester.ensureVisible(find.text('MP3 · 192 kbps'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('MP3 · 192 kbps'));
+      await tester.pumpAndSettle();
+      expect(dlCtrl.audioConfig.bitrate, AudioBitrate.kbps192);
 
       // Confirm selection
       await tester.tap(find.text('Confirm Selection'));
       await tester.pumpAndSettle();
 
       expect(find.text('Select Quality & Format'), findsNothing);
+      expect(tester.testTextInput.isVisible, isFalse);
+      expect(tester.widget<TextField>(urlField).focusNode!.hasFocus, isFalse);
+      expect(find.text('Format: Audio'), findsOneWidget);
+
+      dlCtrl.setDownloadDirectory('/fake/downloads');
+      await tester.ensureVisible(find.text('Download Audio (MP3)'));
+      await tester.tap(find.text('Download Audio (MP3)'));
+      await tester.pumpAndSettle();
+      expect(downloadService.lastQuality?.isAudioOnly, isTrue);
+      expect(downloadService.lastAudioConfig?.format, AudioFormat.mp3);
+      expect(downloadService.lastAudioConfig?.bitrate, AudioBitrate.kbps192);
+
+      await tester.tap(find.text('Downloader'));
+      await tester.pumpAndSettle();
+      await tester.showKeyboard(urlField);
+      await tester.pumpAndSettle();
+      expect(tester.testTextInput.isVisible, isTrue);
     });
   });
 }
