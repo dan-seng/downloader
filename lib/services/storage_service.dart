@@ -1,6 +1,7 @@
 import 'dart:io' as io;
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart' as pp;
+import '../core/native/mobile_native_bridge.dart';
 
 /// Service handling downloads storage path resolution, directory picking,
 /// and native file manager interaction.
@@ -9,18 +10,28 @@ class StorageService {
 
   /// Gets the default system downloads folder.
   Future<String> getDefaultDownloadsDirectory() async {
-    try {
-      final dir = await pp.getDownloadsDirectory();
-      if (dir != null && await dir.exists()) {
-        return dir.path;
-      }
-    } catch (_) {
-      // Fallback below
-    }
-
-    // Platform-specific environment fallbacks
+    // Android: the public Downloads/VINX folder comes first when storage access
+    // is granted; path_provider's getDownloadsDirectory() returns an app-private
+    // dir on Android and must only be used as fallback.
     if (io.Platform.isAndroid) {
-      // 1. Try public Download folder if accessible and writable
+      // 1. Try public Downloads/VINX folder via native bridge
+      try {
+        final nativePublicPath = await MobileNativeBridge.getPublicDownloadsDirectory();
+        if (nativePublicPath != null && nativePublicPath.isNotEmpty) {
+          final dir = io.Directory(nativePublicPath);
+          if (!await dir.exists()) await dir.create(recursive: true);
+          final probe = io.File('${dir.path}/.write_test');
+          await probe.writeAsString('ok');
+          if (await probe.exists()) {
+            await probe.delete();
+            return dir.path;
+          }
+        }
+      } catch (_) {
+        // Scoped storage restricted; fall back below
+      }
+
+      // 2. Direct public Download folder check
       try {
         final publicDownload = io.Directory('/storage/emulated/0/Download');
         if (await publicDownload.exists()) {
@@ -37,24 +48,14 @@ class StorageService {
           }
         }
       } catch (_) {
-        // Scoped storage restricted; fall back to app external downloads
+        // Scoped storage restricted; fall back below
       }
 
-      // 2. Try app-specific external downloads directory (guaranteed read/write without permissions)
+      // 3. App-specific external downloads directory (guaranteed without permissions)
       try {
         final extDirs = await pp.getExternalStorageDirectories(type: pp.StorageDirectory.downloads);
         if (extDirs != null && extDirs.isNotEmpty) {
           final dir = extDirs.first;
-          if (!await dir.exists()) await dir.create(recursive: true);
-          return dir.path;
-        }
-      } catch (_) {}
-
-      // 3. Fallback to external storage root/Download
-      try {
-        final ext = await pp.getExternalStorageDirectory();
-        if (ext != null) {
-          final dir = io.Directory('${ext.path}/Download');
           if (!await dir.exists()) await dir.create(recursive: true);
           return dir.path;
         }
@@ -67,7 +68,18 @@ class StorageService {
         if (!await dir.exists()) await dir.create(recursive: true);
         return dir.path;
       } catch (_) {}
-    } else if (io.Platform.isLinux) {
+    }
+
+    try {
+      final dir = await pp.getDownloadsDirectory();
+      if (dir != null && await dir.exists()) {
+        return dir.path;
+      }
+    } catch (_) {
+      // Fallback below
+    }
+
+    if (io.Platform.isLinux) {
       final xdg = io.Platform.environment['XDG_DOWNLOAD_DIR'];
       if (xdg != null && xdg.isNotEmpty && await io.Directory(xdg).exists()) {
         return xdg;
@@ -105,7 +117,9 @@ class StorageService {
   Future<void> openDirectory(String directoryPath) async {
     if (directoryPath.isEmpty) return;
 
-    if (io.Platform.isLinux) {
+    if (io.Platform.isAndroid) {
+      await MobileNativeBridge.openFolder(directoryPath);
+    } else if (io.Platform.isLinux) {
       await io.Process.run('xdg-open', [directoryPath]);
     } else if (io.Platform.isWindows) {
       await io.Process.run('explorer.exe', [directoryPath]);
@@ -126,12 +140,30 @@ class StorageService {
       return;
     }
 
-    if (io.Platform.isLinux) {
+    if (io.Platform.isAndroid) {
+      await MobileNativeBridge.openFile(filePath);
+    } else if (io.Platform.isLinux) {
       await io.Process.run('xdg-open', [filePath]);
     } else if (io.Platform.isWindows) {
       await io.Process.run('explorer.exe', ['/select,', filePath]);
     } else if (io.Platform.isMacOS) {
       await io.Process.run('open', ['-R', filePath]);
+    }
+  }
+
+  /// Shares the downloaded file via the native share sheet.
+  Future<void> shareFile(String filePath) async {
+    if (filePath.isEmpty) return;
+    if (io.Platform.isAndroid) {
+      await MobileNativeBridge.shareFile(filePath);
+    }
+  }
+
+  /// Notifies the Android MediaStore / MediaScanner to index the file.
+  Future<void> scanMediaFile(String filePath) async {
+    if (filePath.isEmpty) return;
+    if (io.Platform.isAndroid) {
+      await MobileNativeBridge.scanMediaFile(filePath);
     }
   }
 
