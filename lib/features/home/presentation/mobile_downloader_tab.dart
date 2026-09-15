@@ -1,3 +1,4 @@
+import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../controllers/download_controller.dart';
@@ -24,7 +25,31 @@ class MobileDownloaderTab extends StatefulWidget {
 
 class _MobileDownloaderTabState extends State<MobileDownloaderTab> {
   late final TextEditingController _urlController;
-  bool _isAudioMode = false;
+  final FocusNode _urlFocusNode = FocusNode();
+  String? _previousVideoQualityId;
+
+  bool get _isAudioMode =>
+      widget.downloadController.selectedQuality?.isAudioOnly == true;
+
+  void _selectMode(bool isAudio) {
+    final controller = widget.downloadController;
+    final current = controller.selectedQuality;
+    if (current?.isAudioOnly == isAudio) return;
+
+    final qualities = controller.availableQualities
+        .where((quality) => quality.isAudioOnly == isAudio)
+        .toList();
+    if (qualities.isEmpty) return;
+
+    if (isAudio) {
+      _previousVideoQualityId = current?.id;
+    }
+    final quality = qualities.firstWhere(
+      (quality) => !isAudio && quality.id == _previousVideoQualityId,
+      orElse: () => qualities.first,
+    );
+    controller.selectQuality(quality);
+  }
 
   @override
   void initState() {
@@ -35,7 +60,13 @@ class _MobileDownloaderTabState extends State<MobileDownloaderTab> {
   @override
   void dispose() {
     _urlController.dispose();
+    _urlFocusNode.dispose();
     super.dispose();
+  }
+
+  void _dismissKeyboard() {
+    _urlFocusNode.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
   }
 
   Future<void> _pasteFromClipboard() async {
@@ -59,9 +90,16 @@ class _MobileDownloaderTabState extends State<MobileDownloaderTab> {
     });
   }
 
-  void _startDownload() {
+  Future<void> _startDownload() async {
     final video = widget.videoController.currentVideo;
     if (video == null) return;
+
+    if (io.Platform.isAndroid) {
+      final hasPerm = await widget.downloadController.checkStoragePermission();
+      if (!hasPerm) {
+        await widget.downloadController.requestStoragePermission();
+      }
+    }
 
     final dlCtrl = widget.downloadController;
     if (dlCtrl.selectedQuality == null && dlCtrl.availableQualities.isNotEmpty) {
@@ -74,26 +112,66 @@ class _MobileDownloaderTabState extends State<MobileDownloaderTab> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        widget.videoController,
+        widget.downloadController,
+      ]),
+      builder: (context, _) {
+        final theme = Theme.of(context);
+        final isDark = theme.brightness == Brightness.dark;
 
-    final bgPanel = isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel;
-    final bgRaised = isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised;
-    final borderColor = isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder;
-    final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
-    final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
-    final activeColor = isDark ? Colors.white : Colors.black;
+        final bgPanel = isDark ? SpideyColors.darkBgPanel : SpideyColors.lightBgPanel;
+        final bgRaised = isDark ? SpideyColors.darkBgRaised : SpideyColors.lightBgRaised;
+        final borderColor = isDark ? SpideyColors.darkBorder : SpideyColors.lightBorder;
+        final textHi = isDark ? SpideyColors.darkTextHi : SpideyColors.lightTextHi;
+        final textDim = isDark ? SpideyColors.darkTextDim : SpideyColors.lightTextDim;
+        final activeColor = isDark ? Colors.white : Colors.black;
 
-    final videoCtrl = widget.videoController;
-    final dlCtrl = widget.downloadController;
-    final currentVideo = videoCtrl.currentVideo;
-    final isPlaylist = videoCtrl.isPlaylist && videoCtrl.currentPlaylist != null;
+        final videoCtrl = widget.videoController;
+        final dlCtrl = widget.downloadController;
+        final currentVideo = videoCtrl.currentVideo;
+        final isPlaylist = videoCtrl.isPlaylist && videoCtrl.currentPlaylist != null;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Storage Permission Warning Banner (if not granted)
+              FutureBuilder<bool>(
+                future: dlCtrl.checkStoragePermission(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData && snapshot.data == false && io.Platform.isAndroid) {
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, size: 20, color: Colors.amber),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Storage access needed to save to Downloads/VINX',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textHi),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => dlCtrl.requestStoragePermission(),
+                            child: const Text('GRANT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
           // Search & Paste Input Card
           Container(
             decoration: BoxDecoration(
@@ -114,6 +192,7 @@ class _MobileDownloaderTabState extends State<MobileDownloaderTab> {
                 Expanded(
                   child: TextField(
                     controller: _urlController,
+                    focusNode: _urlFocusNode,
                     style: TextStyle(fontSize: 14, color: textHi),
                     decoration: InputDecoration(
                       hintText: 'Paste video link or playlist...',
@@ -328,31 +407,22 @@ class _MobileDownloaderTabState extends State<MobileDownloaderTab> {
 
                         // Quality & Format Picker Selector Card
                         InkWell(
-                          onTap: () {
-                            MobileFormatBottomSheet.show(
+                          onTap: () async {
+                            _dismissKeyboard();
+                            await MobileFormatBottomSheet.show(
                               context: context,
                               availableQualities: dlCtrl.availableQualities,
                               selectedQuality: dlCtrl.selectedQuality,
                               audioConfig: dlCtrl.audioConfig,
                               isAudioMode: _isAudioMode,
-                              onQualitySelected: (q) {
-                                dlCtrl.selectQuality(q);
-                                setState(() {
-                                  _isAudioMode = q.isAudioOnly;
-                                });
-                              },
+                              onQualitySelected: dlCtrl.selectQuality,
                               onAudioConfigSelected: (cfg) {
+                                _selectMode(true);
                                 dlCtrl.updateAudioConfig(cfg);
-                                setState(() {
-                                  _isAudioMode = true;
-                                });
                               },
-                              onModeChanged: (isAudio) {
-                                setState(() {
-                                  _isAudioMode = isAudio;
-                                });
-                              },
+                              onModeChanged: _selectMode,
                             );
+                            if (mounted) _dismissKeyboard();
                           },
                           borderRadius: BorderRadius.circular(14),
                           child: Container(
@@ -595,6 +665,8 @@ class _MobileDownloaderTabState extends State<MobileDownloaderTab> {
         ],
       ),
     );
+  },
+);
   }
 
   Widget _buildPlatformChip(String label, IconData icon, Color textDim, Color bg, Color border) {
