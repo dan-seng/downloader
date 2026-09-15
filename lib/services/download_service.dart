@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
+import 'package:http/http.dart' as http;
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt_exp;
 import '../core/network/mobile_youtube_client.dart';
 import 'storage_service.dart';
@@ -35,6 +36,8 @@ class DownloadService {
   final EngineService? engineService;
 
   io.Process? _activeProcess;
+  http.Client? _activeHttpClient;
+  yt_exp.YoutubeExplode? _activeMobileYt;
   DownloadTask? _currentTask;
   bool _cancelled = false;
 
@@ -110,7 +113,7 @@ class DownloadService {
     final arguments = [
       '--newline',
       '--progress-template',
-      'download:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s',
+      'download:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s|%(progress.downloaded_bytes)s|%(progress.total_bytes)s',
       if (ffmpegDir != null && ffmpegDir.isNotEmpty) ...[
         '--ffmpeg-location',
         ffmpegDir,
@@ -244,6 +247,16 @@ class DownloadService {
       process.kill(io.ProcessSignal.sigterm);
       _activeProcess = null;
     }
+
+    try {
+      _activeHttpClient?.close();
+    } catch (_) {}
+    _activeHttpClient = null;
+
+    try {
+      _activeMobileYt?.close();
+    } catch (_) {}
+    _activeMobileYt = null;
   }
 
   void _parseStdoutLine(String line, DownloadTask task) {
@@ -302,6 +315,20 @@ class DownloadService {
         task.eta = _parseEtaDuration(etaStr);
       }
     }
+
+    if (parts.length >= 4) {
+      final downloadedStr = parts[3].trim();
+      if (downloadedStr != 'NA' && downloadedStr.isNotEmpty) {
+        task.transferredBytes = int.tryParse(downloadedStr);
+      }
+    }
+
+    if (parts.length >= 5) {
+      final totalStr = parts[4].trim();
+      if (totalStr != 'NA' && totalStr.isNotEmpty) {
+        task.totalBytes = int.tryParse(totalStr);
+      }
+    }
   }
 
   double? _parseSpeedToBytes(String speedStr) {
@@ -349,7 +376,7 @@ class DownloadService {
         .trim();
   }
 
-  /// Downloads video/audio directly on Android using the pure Dart engine.
+  /// Downloads video/audio directly on Android using the resilient chunked stream engine.
   Future<void> _startAndroidDownload({
     required VideoInfo video,
     required QualityOption quality,
@@ -359,11 +386,15 @@ class DownloadService {
     AudioConfig? audioConfig,
   }) async {
     final yt = createMobileYoutubeExplode();
+    _activeMobileYt = yt;
+
     try {
       onLog?.call('\$ vinx-native-download --id ${video.id}');
       onLog?.call('[Engine] Initializing mobile stream pipeline...');
 
-      final manifest = await yt.videos.streamsClient.getManifest(video.id);
+      final manifest = await yt.videos.streamsClient
+          .getManifest(video.id)
+          .timeout(const Duration(seconds: 25));
 
       yt_exp.StreamInfo? targetStream;
       String fileExt = 'mp4';
@@ -420,67 +451,178 @@ class DownloadService {
       final targetFile = io.File('$activeDirectory/$sanitizedTitle.$fileExt');
 
       onLog?.call('[Engine] Destination: ${targetFile.path}');
-      onLog?.call('[Engine] Expected stream size: ${(targetStream.size.totalBytes / (1024 * 1024)).toStringAsFixed(1)} MB');
-
       final totalBytes = targetStream.size.totalBytes;
+      if (totalBytes > 0) {
+        onLog?.call('[Engine] Stream size: ${(totalBytes / (1024 * 1024)).toStringAsFixed(1)} MB (${targetStream.container.name})');
+      }
+
       var receivedBytes = 0;
       final startTime = DateTime.now();
+      var lastEmitTime = DateTime.fromMillisecondsSinceEpoch(0);
+      var lastWindowBytes = 0;
+      var lastWindowTime = DateTime.now();
 
-      final stream = yt.videos.streamsClient.get(targetStream);
+      final task = _currentTask;
+      if (task != null) {
+        task.transferredBytes = 0;
+        task.totalBytes = totalBytes > 0 ? totalBytes : null;
+        task.destinationPath = targetFile.path;
+        onProgress(task);
+      }
+
       final output = targetFile.openWrite();
+      final httpClient = http.Client();
+      _activeHttpClient = httpClient;
 
       try {
-        await for (final chunk in stream) {
-          if (_cancelled) {
-            await output.close();
-            if (await targetFile.exists()) await targetFile.delete();
-            final task = _currentTask;
-            if (task != null) {
-              task.status = DownloadStatus.cancelled;
-              task.progress = 0.0;
-              onProgress(task);
+        if (targetStream.fragments.isEmpty && totalBytes > 0) {
+          // Discrete 2 MB HTTP Range chunks
+          const chunkSize = 2 * 1024 * 1024;
+          while (!_cancelled && receivedBytes < totalBytes) {
+            final endByte = (receivedBytes + chunkSize - 1).clamp(0, totalBytes - 1);
+
+            var attempt = 0;
+            var success = false;
+            Object? lastError;
+
+            while (!_cancelled && attempt < 3 && !success) {
+              attempt++;
+              try {
+                final req = http.Request('GET', targetStream.url);
+                req.headers['Range'] = 'bytes=$receivedBytes-$endByte';
+                req.headers['User-Agent'] =
+                    'com.google.android.youtube/19.29.37 (Linux; U; Android 11)';
+
+                final streamedRes = await httpClient
+                    .send(req)
+                    .timeout(const Duration(seconds: 20));
+
+                if (streamedRes.statusCode != 200 && streamedRes.statusCode != 206) {
+                  throw ProcessExecutionException(
+                    'Server returned HTTP ${streamedRes.statusCode} for chunk bytes $receivedBytes-$endByte',
+                  );
+                }
+
+                await for (final byteChunk in streamedRes.stream.timeout(const Duration(seconds: 20))) {
+                  if (_cancelled) break;
+                  output.add(byteChunk);
+                  receivedBytes += byteChunk.length;
+
+                  final now = DateTime.now();
+                  final timeSinceLastEmit = now.difference(lastEmitTime).inMilliseconds;
+
+                  if (timeSinceLastEmit >= 100 || receivedBytes >= totalBytes) {
+                    lastEmitTime = now;
+
+                    final windowElapsed = now.difference(lastWindowTime).inMilliseconds / 1000.0;
+                    double currentSpeed = 0.0;
+                    if (windowElapsed >= 0.8) {
+                      currentSpeed = (receivedBytes - lastWindowBytes) / windowElapsed;
+                      lastWindowBytes = receivedBytes;
+                      lastWindowTime = now;
+                    } else {
+                      final lifetimeElapsed = now.difference(startTime).inMilliseconds / 1000.0;
+                      currentSpeed = lifetimeElapsed > 0 ? (receivedBytes / lifetimeElapsed) : 0.0;
+                    }
+
+                    final progress = (receivedBytes / totalBytes).clamp(0.0, 1.0);
+                    final remainingBytes = totalBytes - receivedBytes;
+                    Duration? eta;
+                    if (currentSpeed > 0 && remainingBytes > 0) {
+                      eta = Duration(seconds: (remainingBytes / currentSpeed).round());
+                    }
+
+                    if (task != null && !_cancelled) {
+                      task.transferredBytes = receivedBytes;
+                      task.totalBytes = totalBytes;
+                      task.progress = progress;
+                      task.speed = currentSpeed;
+                      task.eta = eta;
+                      task.destinationPath = targetFile.path;
+                      onProgress(task);
+                    }
+                  }
+                }
+                success = true;
+              } catch (err) {
+                if (_cancelled) break;
+                lastError = err;
+                if (attempt < 3) {
+                  onLog?.call('[Network] Retrying chunk transfer ($attempt/3)...');
+                  await Future.delayed(const Duration(milliseconds: 1000));
+                }
+              }
             }
-            onLog?.call('[Engine] Download cancelled by user.');
-            return;
+
+            if (!success && !_cancelled) {
+              throw ProcessExecutionException(
+                'Failed to download media chunk after 3 attempts: ${lastError ?? "Connection timed out"}',
+              );
+            }
           }
+        } else {
+          // Fallback stream for HLS or indeterminate streams
+          final stream = yt.videos.streamsClient.get(targetStream);
+          await for (final chunk in stream.timeout(const Duration(seconds: 25))) {
+            if (_cancelled) break;
+            output.add(chunk);
+            receivedBytes += chunk.length;
 
-          output.add(chunk);
-          receivedBytes += chunk.length;
+            final now = DateTime.now();
+            final timeSinceLastEmit = now.difference(lastEmitTime).inMilliseconds;
+            if (timeSinceLastEmit >= 100) {
+              lastEmitTime = now;
+              final elapsedSeconds = now.difference(startTime).inMilliseconds / 1000.0;
+              final speedBytesPerSec = elapsedSeconds > 0 ? (receivedBytes / elapsedSeconds) : 0.0;
+              final progress = totalBytes > 0 ? (receivedBytes / totalBytes).clamp(0.0, 1.0) : 0.0;
 
-          final elapsedSeconds = DateTime.now().difference(startTime).inMilliseconds / 1000.0;
-          final speedBytesPerSec = elapsedSeconds > 0 ? (receivedBytes / elapsedSeconds) : 0.0;
-          final progress = totalBytes > 0 ? (receivedBytes / totalBytes) : 0.0;
-
-          final remainingBytes = totalBytes - receivedBytes;
-          Duration? eta;
-          if (speedBytesPerSec > 0 && remainingBytes > 0) {
-            eta = Duration(seconds: (remainingBytes / speedBytesPerSec).round());
-          }
-
-          final task = _currentTask;
-          if (task != null) {
-            task.progress = progress.clamp(0.0, 1.0);
-            task.speed = speedBytesPerSec;
-            task.eta = eta;
-            task.destinationPath = targetFile.path;
-            onProgress(task);
+              if (task != null && !_cancelled) {
+                task.transferredBytes = receivedBytes;
+                task.totalBytes = totalBytes > 0 ? totalBytes : null;
+                task.progress = progress;
+                task.speed = speedBytesPerSec;
+                task.destinationPath = targetFile.path;
+                onProgress(task);
+              }
+            }
           }
         }
       } finally {
         await output.flush();
         await output.close();
+        httpClient.close();
+        _activeHttpClient = null;
       }
 
-      final task = _currentTask;
+      if (_cancelled) {
+        if (await targetFile.exists()) await targetFile.delete();
+        if (task != null) {
+          task.status = DownloadStatus.cancelled;
+          task.progress = 0.0;
+          task.errorMessage = 'Download cancelled by user.';
+          onProgress(task);
+        }
+        onLog?.call('[Engine] Download cancelled.');
+        return;
+      }
+
       if (task != null) {
         task.status = DownloadStatus.completed;
         task.progress = 1.0;
+        task.transferredBytes = totalBytes > 0 ? totalBytes : receivedBytes;
+        task.totalBytes = totalBytes > 0 ? totalBytes : receivedBytes;
         task.speed = 0.0;
         task.eta = Duration.zero;
         task.destinationPath = targetFile.path;
         onProgress(task);
       }
       onLog?.call('[Engine] Download successfully finished!');
+
+      // Register file in Android MediaStore so it appears in Gallery & Files app
+      if (io.Platform.isAndroid) {
+        await const StorageService().scanMediaFile(targetFile.path);
+        onLog?.call('[Storage] File indexed into Android MediaStore.');
+      }
     } catch (e) {
       if (_cancelled) return;
       final task = _currentTask;
@@ -493,6 +635,7 @@ class DownloadService {
       rethrow;
     } finally {
       yt.close();
+      _activeMobileYt = null;
       _activeProcess = null;
     }
   }
