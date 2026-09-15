@@ -1,3 +1,5 @@
+import '../core/utils/formatters.dart';
+
 /// Status of a download task.
 enum DownloadStatus {
   queued,
@@ -20,6 +22,8 @@ class DownloadTask {
   double? speed; // bytes per second
   Duration? eta;
   String? errorMessage;
+  int? transferredBytes;
+  int? totalBytes;
 
   DownloadTask({
     required this.id,
@@ -32,7 +36,14 @@ class DownloadTask {
     this.speed,
     this.eta,
     this.errorMessage,
+    this.transferredBytes,
+    this.totalBytes,
   });
+
+  bool get isCompleted => status == DownloadStatus.completed;
+  bool get isFailed => status == DownloadStatus.failed;
+  bool get isCancelled => status == DownloadStatus.cancelled;
+  bool get isDownloading => status == DownloadStatus.downloading;
 
   String get formattedSpeed {
     if (speed == null || speed! <= 0) return '0.0 MB/s';
@@ -49,5 +60,20 @@ class DownloadTask {
     final minutes = eta!.inMinutes;
     final seconds = totalSeconds % 60;
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  String get formattedSizeProgress {
+    if (transferredBytes == null || transferredBytes! <= 0) {
+      if (totalBytes != null && totalBytes! > 0) {
+        return '0 B / ${Formatters.formatBytes(totalBytes)}';
+      }
+      return '';
+    }
+    final transferred = Formatters.formatBytes(transferredBytes);
+    if (totalBytes != null && totalBytes! > 0) {
+      final total = Formatters.formatBytes(totalBytes);
+      return '$transferred / $total';
+    }
+    return '$transferred downloaded';
   }
 }
