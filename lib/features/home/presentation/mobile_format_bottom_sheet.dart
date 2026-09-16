@@ -3,6 +3,15 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/audio_config.dart';
 import '../../../models/quality_option.dart';
 
+extension _IterableFirstWhereOrNull<T> on Iterable<T> {
+  T? firstWhereOrNull(bool Function(T element) test) {
+    for (final element in this) {
+      if (test(element)) return element;
+    }
+    return null;
+  }
+}
+
 /// Modal bottom sheet for choosing download quality and formats on mobile.
 /// Implemented as a StatefulWidget for instantaneous, stutter-free local responsiveness.
 class MobileFormatBottomSheet extends StatefulWidget {
@@ -74,6 +83,23 @@ class _MobileFormatBottomSheetState extends State<MobileFormatBottomSheet> {
         _isAudioMode = isAudio;
       });
       widget.onModeChanged(isAudio);
+      if (isAudio) {
+        widget.onAudioConfigSelected(_audioConfig);
+        final audioQuality = widget.availableQualities.firstWhereOrNull(
+              (q) => q.isAudioOnly && q.extension == _audioConfig.format.id,
+            ) ??
+            QualityOption(
+              id: 'audio_${_audioConfig.format.id}',
+              label: 'Audio (${_audioConfig.format.id.toUpperCase()} · ${_audioConfig.bitrate.id.toUpperCase()})',
+              extension: _audioConfig.format.id,
+              isAudioOnly: true,
+              formatSpecifier: 'ba/b',
+            );
+        _selectedQuality = audioQuality;
+        widget.onQualitySelected(audioQuality);
+      } else {
+        _selectedQuality = null;
+      }
     }
   }
 
@@ -89,6 +115,30 @@ class _MobileFormatBottomSheetState extends State<MobileFormatBottomSheet> {
       _audioConfig = config;
     });
     widget.onAudioConfigSelected(config);
+  }
+
+  void _confirmSelection() {
+    if (_isAudioMode) {
+      widget.onModeChanged(true);
+      widget.onAudioConfigSelected(_audioConfig);
+      final audioQuality = widget.availableQualities.firstWhereOrNull(
+            (q) => q.isAudioOnly && q.extension == _audioConfig.format.id,
+          ) ??
+          QualityOption(
+            id: 'audio_${_audioConfig.format.id}',
+            label: 'Audio (${_audioConfig.format.id.toUpperCase()} · ${_audioConfig.bitrate.id.toUpperCase()})',
+            extension: _audioConfig.format.id,
+            isAudioOnly: true,
+            formatSpecifier: 'ba/b',
+          );
+      widget.onQualitySelected(audioQuality);
+    } else {
+      widget.onModeChanged(false);
+      if (_selectedQuality != null && !_selectedQuality!.isAudioOnly) {
+        widget.onQualitySelected(_selectedQuality!);
+      }
+    }
+    Navigator.of(context).pop();
   }
 
   @override
@@ -275,7 +325,7 @@ class _MobileFormatBottomSheetState extends State<MobileFormatBottomSheet> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: _confirmSelection,
                 child: const Text(
                   'Confirm Selection',
                   style: TextStyle(
@@ -315,7 +365,9 @@ class _MobileFormatBottomSheetState extends State<MobileFormatBottomSheet> {
 
     return Column(
       children: qualities.map((q) {
-        final isSelected = _selectedQuality?.id == q.id;
+        final isSelected = (_selectedQuality != null && !_selectedQuality!.isAudioOnly)
+            ? _selectedQuality?.id == q.id
+            : (widget.selectedQuality?.id == q.id);
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
@@ -426,10 +478,23 @@ class _MobileFormatBottomSheetState extends State<MobileFormatBottomSheet> {
           padding: const EdgeInsets.only(bottom: 8),
           child: InkWell(
             onTap: () {
-              _selectAudioConfig(_audioConfig.copyWith(
+              final newConfig = _audioConfig.copyWith(
                 format: format,
                 bitrate: bitrate,
-              ));
+              );
+              _selectAudioConfig(newConfig);
+              final audioQuality = widget.availableQualities.firstWhereOrNull(
+                    (q) => q.isAudioOnly && q.extension == newConfig.format.id,
+                  ) ??
+                  QualityOption(
+                    id: 'audio_${newConfig.format.id}',
+                    label: 'Audio (${newConfig.format.id.toUpperCase()} · ${newConfig.bitrate.id.toUpperCase()})',
+                    extension: newConfig.format.id,
+                    isAudioOnly: true,
+                    formatSpecifier: 'ba/b',
+                  );
+              _selectedQuality = audioQuality;
+              widget.onQualitySelected(audioQuality);
             },
             borderRadius: BorderRadius.circular(14),
             child: Container(
