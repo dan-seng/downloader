@@ -451,8 +451,19 @@ class _MobileDownloaderTabState extends State<MobileDownloaderTab> {
                               isAudioMode: _isAudioMode,
                               onQualitySelected: dlCtrl.selectQuality,
                               onAudioConfigSelected: (cfg) {
-                                _selectMode(true);
                                 dlCtrl.updateAudioConfig(cfg);
+                                _selectMode(true);
+                                final audioQuality = dlCtrl.availableQualities.firstWhereOrNull(
+                                      (q) => q.isAudioOnly && q.extension == cfg.format.id,
+                                    ) ??
+                                    QualityOption(
+                                      id: 'audio_${cfg.format.id}',
+                                      label: 'Audio (${cfg.format.id.toUpperCase()} · ${cfg.bitrate.id.toUpperCase()})',
+                                      extension: cfg.format.id,
+                                      isAudioOnly: true,
+                                      formatSpecifier: 'ba/b',
+                                    );
+                                dlCtrl.selectQuality(audioQuality);
                               },
                               onModeChanged: _selectMode,
                             );
