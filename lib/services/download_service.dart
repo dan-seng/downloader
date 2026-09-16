@@ -693,8 +693,12 @@ class DownloadService {
 
       // Register file in Android MediaStore so it appears in Gallery & Files app
       if (io.Platform.isAndroid) {
-        await const StorageService().scanMediaFile(targetFile.path);
-        onLog?.call('[Storage] File indexed into Android MediaStore.');
+        try {
+          await const StorageService().scanMediaFile(targetFile.path);
+          onLog?.call('[Storage] File indexed into Android MediaStore.');
+        } catch (e) {
+          onLog?.call('[Storage] Media scan notice: $e');
+        }
       }
     } catch (e) {
       if (_cancelled) return;
