@@ -104,8 +104,7 @@ class _MobileDownloaderTabState extends State<MobileDownloaderTab> {
     if (url.isEmpty || widget.videoController.isLoading) return;
     FocusScope.of(context).unfocus();
     widget.videoController.analyzeUrl(url).then((_) {
-      if (widget.videoController.currentVideo != null &&
-          widget.videoController.currentVideo!.formats.isNotEmpty) {
+      if (widget.videoController.currentVideo != null) {
         widget.downloadController.setVideo(widget.videoController.currentVideo);
       }
     });
@@ -123,8 +122,22 @@ class _MobileDownloaderTabState extends State<MobileDownloaderTab> {
     }
 
     final dlCtrl = widget.downloadController;
-    if (dlCtrl.selectedQuality == null && dlCtrl.availableQualities.isNotEmpty) {
-      dlCtrl.selectQuality(dlCtrl.availableQualities.first);
+    if (_isAudioMode) {
+      if (dlCtrl.selectedQuality == null || !dlCtrl.selectedQuality!.isAudioOnly) {
+        final audioQuality = dlCtrl.availableQualities.firstWhereOrNull((q) => q.isAudioOnly) ??
+            QualityOption(
+              id: 'audio_${dlCtrl.audioConfig.format.id}',
+              label: 'Audio Only (${dlCtrl.audioConfig.format.id.toUpperCase()})',
+              extension: dlCtrl.audioConfig.format.id,
+              isAudioOnly: true,
+              formatSpecifier: 'ba/b',
+            );
+        dlCtrl.selectQuality(audioQuality);
+      }
+    } else {
+      if (dlCtrl.selectedQuality == null && dlCtrl.availableQualities.isNotEmpty) {
+        dlCtrl.selectQuality(dlCtrl.availableQualities.first);
+      }
     }
 
     dlCtrl.startDownload(video);
