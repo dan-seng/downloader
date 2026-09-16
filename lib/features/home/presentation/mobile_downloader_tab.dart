@@ -4,7 +4,17 @@ import 'package:flutter/services.dart';
 import '../../../controllers/download_controller.dart';
 import '../../../controllers/video_controller.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../models/quality_option.dart';
 import 'mobile_format_bottom_sheet.dart';
+
+extension _IterableFirstWhereOrNull<T> on Iterable<T> {
+  T? firstWhereOrNull(bool Function(T element) test) {
+    for (final element in this) {
+      if (test(element)) return element;
+    }
+    return null;
+  }
+}
 
 /// Main downloader tab on mobile with URL input, paste action, video card, and download CTA.
 class MobileDownloaderTab extends StatefulWidget {
@@ -39,16 +49,27 @@ class _MobileDownloaderTabState extends State<MobileDownloaderTab> {
     final qualities = controller.availableQualities
         .where((quality) => quality.isAudioOnly == isAudio)
         .toList();
-    if (qualities.isEmpty) return;
 
     if (isAudio) {
       _previousVideoQualityId = current?.id;
+      final audioQuality = qualities.isNotEmpty
+          ? qualities.first
+          : QualityOption(
+              id: 'audio_${controller.audioConfig.format.id}',
+              label: 'Audio Only (${controller.audioConfig.format.id.toUpperCase()})',
+              extension: controller.audioConfig.format.id,
+              isAudioOnly: true,
+              formatSpecifier: 'ba/b',
+            );
+      controller.selectQuality(audioQuality);
+    } else {
+      if (qualities.isEmpty) return;
+      final quality = qualities.firstWhere(
+        (quality) => quality.id == _previousVideoQualityId,
+        orElse: () => qualities.first,
+      );
+      controller.selectQuality(quality);
     }
-    final quality = qualities.firstWhere(
-      (quality) => !isAudio && quality.id == _previousVideoQualityId,
-      orElse: () => qualities.first,
-    );
-    controller.selectQuality(quality);
   }
 
   @override
