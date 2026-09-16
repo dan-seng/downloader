@@ -499,98 +499,127 @@ class DownloadService {
         onProgress(task);
       }
 
-      final output = targetFile.openWrite();
-      final httpClient = http.Client();
+      var output = targetFile.openWrite();
+      final httpClient = MobileYoutubeHttpClient();
       _activeHttpClient = httpClient;
+      var downloadedViaChunks = false;
 
       try {
         if (targetStream.fragments.isEmpty && totalBytes > 0) {
-          // Discrete 2 MB HTTP Range chunks
-          const chunkSize = 2 * 1024 * 1024;
-          while (!_cancelled && receivedBytes < totalBytes) {
-            final endByte = (receivedBytes + chunkSize - 1).clamp(0, totalBytes - 1);
+          try {
+            // Discrete 2 MB HTTP Range chunks
+            const chunkSize = 2 * 1024 * 1024;
+            while (!_cancelled && receivedBytes < totalBytes) {
+              final endByte = (receivedBytes + chunkSize - 1).clamp(0, totalBytes - 1);
 
-            var attempt = 0;
-            var success = false;
-            Object? lastError;
+              var attempt = 0;
+              var success = false;
+              Object? lastError;
+              final bytesBeforeChunk = receivedBytes;
 
-            while (!_cancelled && attempt < 3 && !success) {
-              attempt++;
-              try {
-                final req = http.Request('GET', targetStream.url);
-                req.headers['Range'] = 'bytes=$receivedBytes-$endByte';
-                req.headers['User-Agent'] =
-                    'com.google.android.youtube/19.29.37 (Linux; U; Android 11)';
+              while (!_cancelled && attempt < 3 && !success) {
+                attempt++;
+                try {
+                  final req = http.Request('GET', targetStream.url);
+                  req.headers['Range'] = 'bytes=$receivedBytes-$endByte';
 
-                final streamedRes = await httpClient
-                    .send(req)
-                    .timeout(const Duration(seconds: 20));
+                  final streamedRes = await httpClient
+                      .send(req)
+                      .timeout(const Duration(seconds: 20));
 
-                if (streamedRes.statusCode != 200 && streamedRes.statusCode != 206) {
-                  throw ProcessExecutionException(
-                    'Server returned HTTP ${streamedRes.statusCode} for chunk bytes $receivedBytes-$endByte',
-                  );
-                }
+                  if (streamedRes.statusCode != 200 && streamedRes.statusCode != 206) {
+                    throw ProcessExecutionException(
+                      'Server returned HTTP ${streamedRes.statusCode} for chunk bytes $receivedBytes-$endByte',
+                    );
+                  }
 
-                await for (final byteChunk in streamedRes.stream.timeout(const Duration(seconds: 20))) {
-                  if (_cancelled) break;
-                  output.add(byteChunk);
-                  receivedBytes += byteChunk.length;
+                  await for (final byteChunk in streamedRes.stream.timeout(const Duration(seconds: 20))) {
+                    if (_cancelled) break;
+                    output.add(byteChunk);
+                    receivedBytes += byteChunk.length;
 
-                  final now = DateTime.now();
-                  final timeSinceLastEmit = now.difference(lastEmitTime).inMilliseconds;
+                    final now = DateTime.now();
+                    final timeSinceLastEmit = now.difference(lastEmitTime).inMilliseconds;
 
-                  if (timeSinceLastEmit >= 100 || receivedBytes >= totalBytes) {
-                    lastEmitTime = now;
+                    if (timeSinceLastEmit >= 100 || receivedBytes >= totalBytes) {
+                      lastEmitTime = now;
 
-                    final windowElapsed = now.difference(lastWindowTime).inMilliseconds / 1000.0;
-                    double currentSpeed = 0.0;
-                    if (windowElapsed >= 0.8) {
-                      currentSpeed = (receivedBytes - lastWindowBytes) / windowElapsed;
-                      lastWindowBytes = receivedBytes;
-                      lastWindowTime = now;
-                    } else {
-                      final lifetimeElapsed = now.difference(startTime).inMilliseconds / 1000.0;
-                      currentSpeed = lifetimeElapsed > 0 ? (receivedBytes / lifetimeElapsed) : 0.0;
-                    }
+                      final windowElapsed = now.difference(lastWindowTime).inMilliseconds / 1000.0;
+                      double currentSpeed = 0.0;
+                      if (windowElapsed >= 0.8) {
+                        currentSpeed = (receivedBytes - lastWindowBytes) / windowElapsed;
+                        lastWindowBytes = receivedBytes;
+                        lastWindowTime = now;
+                      } else {
+                        final lifetimeElapsed = now.difference(startTime).inMilliseconds / 1000.0;
+                        currentSpeed = lifetimeElapsed > 0 ? (receivedBytes / lifetimeElapsed) : 0.0;
+                      }
 
-                    final progress = (receivedBytes / totalBytes).clamp(0.0, 1.0);
-                    final remainingBytes = totalBytes - receivedBytes;
-                    Duration? eta;
-                    if (currentSpeed > 0 && remainingBytes > 0) {
-                      eta = Duration(seconds: (remainingBytes / currentSpeed).round());
-                    }
+                      final progress = (receivedBytes / totalBytes).clamp(0.0, 1.0);
+                      final remainingBytes = totalBytes - receivedBytes;
+                      Duration? eta;
+                      if (currentSpeed > 0 && remainingBytes > 0) {
+                        eta = Duration(seconds: (remainingBytes / currentSpeed).round());
+                      }
 
-                    if (task != null && !_cancelled) {
-                      task.transferredBytes = receivedBytes;
-                      task.totalBytes = totalBytes;
-                      task.progress = progress;
-                      task.speed = currentSpeed;
-                      task.eta = eta;
-                      task.destinationPath = targetFile.path;
-                      onProgress(task);
+                      if (task != null && !_cancelled) {
+                        task.transferredBytes = receivedBytes;
+                        task.totalBytes = totalBytes;
+                        task.progress = progress;
+                        task.speed = currentSpeed;
+                        task.eta = eta;
+                        task.destinationPath = targetFile.path;
+                        onProgress(task);
+                      }
                     }
                   }
-                }
-                success = true;
-              } catch (err) {
-                if (_cancelled) break;
-                lastError = err;
-                if (attempt < 3) {
-                  onLog?.call('[Network] Retrying chunk transfer ($attempt/3)...');
-                  await Future.delayed(const Duration(milliseconds: 1000));
+
+                  // A chunk that moves no bytes means the server answered with an
+                  // empty/unsupported range — treat it as a failure so the loop
+                  // can't spin forever leaving the task stuck at its current %.
+                  success = receivedBytes > bytesBeforeChunk;
+                  if (!success && attempt < 3) {
+                    lastError = ProcessExecutionException(
+                      'Server returned no data for range $bytesBeforeChunk-$endByte',
+                    );
+                  }
+                } catch (err) {
+                  if (_cancelled) break;
+                  lastError = err;
+                  if (attempt < 3) {
+                    onLog?.call('[Network] Retrying chunk transfer ($attempt/3)...');
+                    await Future.delayed(const Duration(milliseconds: 800));
+                  }
                 }
               }
-            }
 
-            if (!success && !_cancelled) {
-              throw ProcessExecutionException(
-                'Failed to download media chunk after 3 attempts: ${lastError ?? "Connection timed out"}',
-              );
+              if (!success && !_cancelled) {
+                throw ProcessExecutionException(
+                  'Failed to download media chunk after 3 attempts: ${lastError ?? "Connection timed out"}',
+                );
+              }
             }
+            downloadedViaChunks = true;
+          } catch (chunkErr) {
+            if (_cancelled) rethrow;
+            onLog?.call('[Engine] Range chunk transfer interrupted ($chunkErr), falling back to direct stream...');
+            try {
+              await output.flush();
+              await output.close();
+            } catch (_) {}
+            if (await targetFile.exists()) {
+              try {
+                await targetFile.delete();
+              } catch (_) {}
+            }
+            output = targetFile.openWrite();
+            receivedBytes = 0;
+            downloadedViaChunks = false;
           }
-        } else {
-          // Fallback stream for HLS or indeterminate streams
+        }
+
+        if (!downloadedViaChunks && !_cancelled) {
+          // Direct stream via youtube_explode streamsClient
           final stream = yt.videos.streamsClient.get(targetStream);
           await for (final chunk in stream.timeout(const Duration(seconds: 25))) {
             if (_cancelled) break;
@@ -615,11 +644,26 @@ class DownloadService {
               }
             }
           }
+
+          // If the server refused the chunked transfer AND the direct stream
+          // produced nothing for a known-size file, fail instead of writing an
+          // empty output and reporting a completed download.
+          if (!_cancelled && totalBytes > 0 && receivedBytes == 0) {
+            throw ProcessExecutionException(
+              'No media data received from the stream; the server did not allow downloading this format.',
+            );
+          }
         }
       } finally {
-        await output.flush();
-        await output.close();
-        httpClient.close();
+        try {
+          await output.flush();
+        } catch (_) {}
+        try {
+          await output.close();
+        } catch (_) {}
+        try {
+          httpClient.close();
+        } catch (_) {}
         _activeHttpClient = null;
       }
 
