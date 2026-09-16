@@ -476,7 +476,7 @@ class DownloadService {
         }
       }
 
-      final sanitizedTitle = video.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final sanitizedTitle = video.title.replaceAll(RegExp(r'[\\/:*?"<>|\r\n\t]'), '_').trim();
       final targetFile = io.File('$activeDirectory/$sanitizedTitle.$fileExt');
 
       onLog?.call('[Engine] Destination: ${targetFile.path}');
