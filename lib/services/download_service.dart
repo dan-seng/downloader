@@ -399,11 +399,40 @@ class DownloadService {
       yt_exp.StreamInfo? targetStream;
       String fileExt = 'mp4';
 
-      if (quality.isAudioOnly) {
-        final matchAudio = manifest.audioOnly.firstWhereOrNull((s) => s.tag.toString() == quality.id);
-        targetStream = matchAudio ?? manifest.audioOnly.withHighestBitrate();
-        fileExt = targetStream.container.name;
+      final isAudio = quality.isAudioOnly ||
+          quality.id.startsWith('audio_') ||
+          (audioConfig != null && quality.height == null && quality.extension != 'mp4');
+
+      if (isAudio) {
+        fileExt = audioConfig?.format.id ?? (quality.extension.isNotEmpty ? quality.extension : 'mp3');
         if (fileExt == 'mp4') fileExt = 'm4a';
+
+        // 1. Try to match specific itag if quality.id is a numeric tag
+        targetStream = manifest.audioOnly.firstWhereOrNull((s) => s.tag.toString() == quality.id);
+
+        if (fileExt == 'mp3' || fileExt == 'm4a' || fileExt == 'aac') {
+          // For MP3 and M4A, AAC streams (container 'mp4', itag 140) provide the best Android playback compatibility
+          targetStream ??= manifest.audioOnly.firstWhereOrNull((s) => s.container.name == 'mp4');
+          if (targetStream == null && manifest.audioOnly.isNotEmpty) {
+            targetStream = manifest.audioOnly.withHighestBitrate();
+          }
+          if (targetStream == null && manifest.muxed.isNotEmpty) {
+            targetStream = manifest.muxed.firstWhereOrNull((s) => s.container.name == 'mp4') ??
+                manifest.muxed.withHighestBitrate();
+          }
+        } else if (fileExt == 'opus') {
+          targetStream ??= manifest.audioOnly.firstWhereOrNull((s) => s.container.name == 'webm');
+          if (targetStream == null && manifest.audioOnly.isNotEmpty) {
+            targetStream = manifest.audioOnly.withHighestBitrate();
+          }
+        } else {
+          if (manifest.audioOnly.isNotEmpty) {
+            targetStream ??= manifest.audioOnly.withHighestBitrate();
+          }
+          if (targetStream == null && manifest.muxed.isNotEmpty) {
+            targetStream = manifest.muxed.withHighestBitrate();
+          }
+        }
       } else {
         // Video mode: first prefer muxed streams (video + audio in one container)
         final targetHeight = quality.height;
