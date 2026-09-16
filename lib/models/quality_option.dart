@@ -138,8 +138,8 @@ class QualityOption {
     options.add(
       QualityOption(
         id: 'audio_best',
-        label: 'Audio Only — M4A/MP3',
-        extension: 'm4a',
+        label: 'Audio Only — MP3',
+        extension: 'mp3',
         isAudioOnly: true,
         formatSpecifier: 'ba/b',
         estimatedBytes: audioFormat?.fileSize,
