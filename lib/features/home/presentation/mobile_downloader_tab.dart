@@ -85,6 +85,24 @@ class _MobileDownloaderTabState extends State<MobileDownloaderTab> {
     super.dispose();
   }
 
+  String _getAudioDownloadLabel(DownloadController ctrl) {
+    final format = ctrl.audioConfig.format.id.toUpperCase();
+    final bitrate = ctrl.audioConfig.bitrate.id.toUpperCase();
+    // On Android, actual format depends on available streams (AAC/M4A or Opus)
+    if (io.Platform.isAndroid) {
+      return 'Download Audio (M4A/Opus · $bitrate)';
+    }
+    return 'Download Audio ($format · $bitrate)';
+  }
+
+  String _getAudioFormatDisplay(DownloadController ctrl) {
+    final bitrate = ctrl.audioConfig.bitrate.id.toUpperCase();
+    if (io.Platform.isAndroid) {
+      return 'M4A/Opus · $bitrate (native stream)';
+    }
+    return '${ctrl.audioConfig.format.id.toUpperCase()} · $bitrate';
+  }
+
   void _dismissKeyboard() {
     _urlFocusNode.unfocus();
     FocusManager.instance.primaryFocus?.unfocus();
@@ -503,16 +521,16 @@ class _MobileDownloaderTabState extends State<MobileDownloaderTab> {
                                         style: TextStyle(fontSize: 11, color: textDim),
                                       ),
                                       const SizedBox(height: 2),
-                                      Text(
+Text(
                                         _isAudioMode
-                                            ? '${dlCtrl.audioConfig.format.id.toUpperCase()} · ${dlCtrl.audioConfig.bitrate.id.toUpperCase()}'
+                                            ? _getAudioFormatDisplay(dlCtrl)
                                             : (dlCtrl.selectedQuality?.label ?? 'Best Available'),
-                                        style: TextStyle(
-                                          fontSize: 13.5,
-                                          fontWeight: FontWeight.bold,
-                                          color: textHi,
-                                        ),
+                                      style: TextStyle(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: textHi,
                                       ),
+                                    ),
                                     ],
                                   ),
                                 ),
@@ -559,27 +577,27 @@ class _MobileDownloaderTabState extends State<MobileDownloaderTab> {
                               ),
                               elevation: 2,
                             ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.download_rounded, size: 20),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(
-                                    _isAudioMode
-                                        ? 'Download Audio (${dlCtrl.audioConfig.format.id.toUpperCase()})'
-                                        : 'Download Video (${dlCtrl.selectedQuality?.height != null ? "${dlCtrl.selectedQuality!.height}p" : "MP4"})',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 14.5,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.3,
+child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.download_rounded, size: 20),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      _isAudioMode
+                                          ? _getAudioDownloadLabel(dlCtrl)
+                                          : 'Download Video (${dlCtrl.selectedQuality?.height != null ? "${dlCtrl.selectedQuality!.height}p" : "MP4"})',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 14.5,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.3,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
+                                ],
+                              ),
                           ),
                         ),
                       ],
