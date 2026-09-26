@@ -220,7 +220,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('MP3 · 320 kbps'), findsOneWidget);
-      expect(find.text('M4A · AAC'), findsOneWidget);
+      expect(find.text('M4A · AAC 256 kbps'), findsOneWidget);
       expect(dlCtrl.selectedQuality?.isAudioOnly, isTrue);
       await tester.ensureVisible(find.text('MP3 · 192 kbps'));
       await tester.pumpAndSettle();
@@ -238,8 +238,8 @@ void main() {
       expect(find.text('Format: Audio'), findsOneWidget);
 
       dlCtrl.setDownloadDirectory('/fake/downloads');
-      await tester.ensureVisible(find.text('Download Audio (MP3)'));
-      await tester.tap(find.text('Download Audio (MP3)'));
+      await tester.ensureVisible(find.textContaining('Download Audio (MP3'));
+      await tester.tap(find.textContaining('Download Audio (MP3'));
       await tester.pumpAndSettle();
       expect(downloadService.lastQuality?.isAudioOnly, isTrue);
       expect(downloadService.lastAudioConfig?.format, AudioFormat.mp3);
