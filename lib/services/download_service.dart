@@ -457,6 +457,23 @@ class DownloadService {
         throw const ProcessExecutionException('No compatible stream found for this video.');
       }
 
+      // Update file extension to match the actual stream container
+      // since mobile download doesn't perform audio conversion (no FFmpeg on Android)
+      if (isAudio) {
+        switch (targetStream.container.name) {
+          case 'mp4':
+            fileExt = 'm4a'; // AAC audio in MP4 container
+            break;
+          case 'webm':
+            fileExt = 'opus'; // Opus audio in WebM container
+            break;
+          default:
+            fileExt = targetStream.container.name;
+        }
+      } else {
+        fileExt = targetStream.container.name;
+      }
+
       // Ensure destination directory is accessible and writable on Android
       var activeDirectory = destinationDirectory;
       var destDir = io.Directory(activeDirectory);
@@ -483,6 +500,9 @@ class DownloadService {
       final totalBytes = targetStream.size.totalBytes;
       if (totalBytes > 0) {
         onLog?.call('[Engine] Stream size: ${(totalBytes / (1024 * 1024)).toStringAsFixed(1)} MB (${targetStream.container.name})');
+      }
+      if (isAudio) {
+        onLog?.call('[Info] Audio conversion not available on Android; saving as native $fileExt (${targetStream.container.name.toUpperCase()})');
       }
 
       var receivedBytes = 0;
