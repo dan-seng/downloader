@@ -1,3 +1,4 @@
+import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/audio_config.dart';
@@ -457,12 +458,13 @@ class _MobileFormatBottomSheetState extends State<MobileFormatBottomSheet> {
     Color borderColor,
     Color bgRaised,
   ) {
+    final isAndroid = io.Platform.isAndroid;
     final formats = [
-      (AudioFormat.mp3, AudioBitrate.kbps320, 'MP3 · 320 kbps', 'Studio High Quality (Recommended)'),
-      (AudioFormat.mp3, AudioBitrate.kbps256, 'MP3 · 256 kbps', 'High Quality / Balanced'),
-      (AudioFormat.mp3, AudioBitrate.kbps192, 'MP3 · 192 kbps', 'Standard / Podcasts'),
-      (AudioFormat.m4a, AudioBitrate.kbps256, 'M4A · AAC', 'Apple & Mobile Native Audio'),
-      (AudioFormat.flac, AudioBitrate.vbr, 'FLAC · Lossless', 'Audiophile Uncompressed Audio'),
+      (AudioFormat.mp3, AudioBitrate.kbps320, 'MP3 · 320 kbps', 'Studio High Quality (Desktop only)'),
+      (AudioFormat.mp3, AudioBitrate.kbps256, 'MP3 · 256 kbps', 'High Quality / Balanced (Desktop only)'),
+      (AudioFormat.mp3, AudioBitrate.kbps192, 'MP3 · 192 kbps', 'Standard / Podcasts (Desktop only)'),
+      (AudioFormat.m4a, AudioBitrate.kbps256, 'M4A · AAC 256 kbps', isAndroid ? 'Native Android Format ✓' : 'Apple & Mobile Native Audio'),
+      (AudioFormat.flac, AudioBitrate.vbr, 'FLAC · Lossless', 'Audiophile Uncompressed (Desktop only)'),
     ];
 
     return Column(
@@ -473,41 +475,59 @@ class _MobileFormatBottomSheetState extends State<MobileFormatBottomSheet> {
         final subtitle = item.$4;
 
         final isSelected = _audioConfig.format == format && _audioConfig.bitrate == bitrate;
+        final isDesktopOnly = format != AudioFormat.m4a && isAndroid;
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: InkWell(
-            onTap: () {
-              final newConfig = _audioConfig.copyWith(
-                format: format,
-                bitrate: bitrate,
-              );
-              _selectAudioConfig(newConfig);
-              final audioQuality = widget.availableQualities.firstWhereOrNull(
-                    (q) => q.isAudioOnly && q.extension == newConfig.format.id,
-                  ) ??
-                  QualityOption(
-                    id: 'audio_${newConfig.format.id}',
-                    label: 'Audio (${newConfig.format.id.toUpperCase()} · ${newConfig.bitrate.id.toUpperCase()})',
-                    extension: newConfig.format.id,
-                    isAudioOnly: true,
-                    formatSpecifier: 'ba/b',
-                  );
-              _selectedQuality = audioQuality;
-              widget.onQualitySelected(audioQuality);
-            },
+            onTap: isDesktopOnly
+                ? () {
+                    // Show info that this format requires desktop/FFmpeg
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '$title requires desktop version with FFmpeg for audio conversion. '
+                          'On Android, audio is saved as native M4A (AAC) or Opus stream.',
+                        ),
+                        duration: const Duration(seconds: 4),
+                        action: SnackBarAction(
+                          label: 'OK',
+                          onPressed: () {},
+                        ),
+                      ),
+                    );
+                  }
+                : () {
+                    final newConfig = _audioConfig.copyWith(
+                      format: format,
+                      bitrate: bitrate,
+                    );
+                    _selectAudioConfig(newConfig);
+                    final audioQuality = widget.availableQualities.firstWhereOrNull(
+                          (q) => q.isAudioOnly && q.extension == newConfig.format.id,
+                        ) ??
+                        QualityOption(
+                          id: 'audio_${newConfig.format.id}',
+                          label: 'Audio (${newConfig.format.id.toUpperCase()} · ${newConfig.bitrate.id.toUpperCase()})',
+                          extension: newConfig.format.id,
+                          isAudioOnly: true,
+                          formatSpecifier: 'ba/b',
+                        );
+                    _selectedQuality = audioQuality;
+                    widget.onQualitySelected(audioQuality);
+                  },
             borderRadius: BorderRadius.circular(14),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: isSelected
                     ? (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05))
-                    : bgRaised,
+                    : (isDesktopOnly ? (isDark ? Colors.grey.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.08)) : bgRaised),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: isSelected
                       ? (isDark ? Colors.white : Colors.black)
-                      : borderColor,
+                      : (isDesktopOnly ? (isDark ? Colors.grey : Colors.grey) : borderColor),
                   width: isSelected ? 1.5 : 1,
                 ),
               ),
@@ -519,7 +539,7 @@ class _MobileFormatBottomSheetState extends State<MobileFormatBottomSheet> {
                         : Icons.radio_button_off_rounded,
                     color: isSelected
                         ? (isDark ? Colors.white : Colors.black)
-                        : textDim,
+                        : (isDesktopOnly ? textDim : textDim),
                     size: 20,
                   ),
                   const SizedBox(width: 14),
@@ -532,7 +552,7 @@ class _MobileFormatBottomSheetState extends State<MobileFormatBottomSheet> {
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                            color: textHi,
+                            color: isDesktopOnly ? textDim : textHi,
                           ),
                         ),
                         Padding(
@@ -556,7 +576,7 @@ class _MobileFormatBottomSheetState extends State<MobileFormatBottomSheet> {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: textNorm,
+                        color: isDesktopOnly ? textDim : textNorm,
                       ),
                     ),
                   ),
