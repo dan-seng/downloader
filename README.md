@@ -13,6 +13,8 @@ Designed with a high-contrast industrial monochrome aesthetic (`#FAF9F6` porcela
 - 🎵 **Audiophile Audio Engine**:
   - Transcode to **FLAC** (Lossless), **WAV** (Uncompressed PCM), **OPUS** (High Efficiency), **MP3** (up to 320 kbps), and **M4A / AAC**.
   - Automatic ID3 / Vorbis metadata tagging (Artist, Title, Album) and thumbnail album art embedding.
+  - *Mobile (Android): Audio saved as native **M4A (AAC)** or **Opus** streams — no FFmpeg transcoding on device.*
+
 - ✂️ **Precision Time Range Trimmer**: Non-destructive start/end timestamp clipping (`hh:mm:ss`) using stream copy before disk write.
 - 🎚️ **Bandwidth Throttle & Off-Peak Scheduler**:
   - Bandwidth caps: Unlimited, 500 KB/s, 1 MB/s, 2.5 MB/s, 5 MB/s, 10 MB/s.
@@ -85,6 +87,24 @@ Verify your environment with:
 ```bash
 flutter doctor
 ```
+
+---
+
+## 📱 Mobile (Android)
+
+The app supports Android via Flutter. Key differences from desktop:
+
+- **Engine**: Uses `youtube_explode_dart` (pure Dart) instead of `yt-dlp` + FFmpeg
+- **Audio formats**: Native **M4A (AAC)** or **Opus** streams only — MP3/FLAC/WAV require desktop FFmpeg
+- **Downloads**: Saved to `Downloads/VINX` (requires storage permission on Android 11+)
+- **Playlist/batch**: Fully supported with background queue
+
+To build for Android:
+```bash
+flutter build apk --release
+```
+
+The APK will be at `build/app/outputs/flutter-apk/app-release.apk`.
 
 ---
 
